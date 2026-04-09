@@ -1,0 +1,31 @@
+# 🔐 Secrets
+.env
+token.json
+credentials.json
+
+# 🧠 Chroma DB (local vector store)
+chroma_data/
+
+# 🐍 Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 📁 OS files
+.DS_Store
+Thumbs.db
+
+# 📦 Virtual environment
+venv/
+.env/
+
+# 📊 Large / generated data (optional)
+data/raw/*.json
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/

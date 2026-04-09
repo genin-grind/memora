@@ -1,0 +1,42 @@
+Project Decision Summary
+
+This document captures the final decisions made regarding key aspects of the project.
+
+---
+
+1. Tech Stack
+
+Frontend: React  
+Backend: FastAPI (Python)
+
+Reasoning:
+- Python provides better support for processing conversations and implementing AI-based logic.
+- FastAPI simplifies API development and integration.
+- While MERN offers familiarity, it is less suitable for the core requirements of the system.
+
+---
+
+2. Database
+
+Primary Database: ChromaDB  
+Optional Component: Neo4j
+
+Reasoning:
+- ChromaDB supports semantic retrieval, which is essential for answering queries.
+- Neo4j can enhance the system by representing relationships and dependencies.
+- Due to time constraints, Neo4j is treated as an optional addition.
+
+---
+
+3. Feature Scope
+
+Approach: Focus on core functionality with high stability
+
+Reasoning:
+- Including too many features may compromise reliability.
+- A smaller, well-executed system provides a better demonstration.
+- The primary goal is to clearly showcase reasoning and traceability.
+
+---
+
+These decisions will guide the implementation of the system.

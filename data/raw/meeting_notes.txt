@@ -1,0 +1,43 @@
+Meeting: Project Planning and Final Decisions
+
+Darshan: We’ve discussed all three key areas over Slack and email. Let’s finalize everything today so we can move forward.
+
+Vivek: Yes, starting with the tech stack — we had two options: sticking with MERN or moving to a Python-based backend.
+
+Sneha: Given that our system heavily depends on processing conversations, extracting reasoning, and working with embeddings, Python is better suited for the backend.
+
+Darshan: Agreed. While MERN is something we are comfortable with, using FastAPI with Python will make it easier to build the core intelligence of the system.
+
+Vivek: Okay, so we finalize React for frontend and FastAPI for backend.
+
+---
+
+Darshan: Next, database decision — ChromaDB vs adding Neo4j.
+
+Sneha: ChromaDB will handle semantic retrieval, which is essential for answering queries.
+
+Vivek: Neo4j is useful for relationships and visualization, but it’s not critical for the core functionality.
+
+Darshan: Considering time constraints, we should keep the system simple and stable.
+
+Sneha: We can include Neo4j as an optional enhancement if time permits.
+
+Vivek: So final decision: ChromaDB as primary, Neo4j optional.
+
+---
+
+Darshan: Lastly, feature scope — whether to include all features or limit for stability.
+
+Vivek: Including everything might introduce instability during demo.
+
+Sneha: Yes, especially since some features are not fully tested.
+
+Darshan: Our priority should be a strong, reliable demonstration of the core system.
+
+Vivek: Agreed, better to show fewer features but with clear reasoning and explanation.
+
+Sneha: So we finalize focusing on core functionality and keeping the system stable.
+
+---
+
+Darshan: Great, all decisions are finalized. Let’s proceed with implementation based on this.
