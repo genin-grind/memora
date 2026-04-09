@@ -1,0 +1,20 @@
+{
+    "kalyani@example.com": {
+        "name": "Kalyani Ugale",
+        "org": "Memora Labs",
+        "role": "Admin",
+        "slack_user_id": "",
+        "gmail_addresses": [
+            "kalyani@example.com"
+        ]
+    },
+    "kalyaniugale24@gmail.com": {
+        "name": "Kalyani Ugale",
+        "org": "Memora Labs",
+        "role": "Admin",
+        "slack_user_id": "",
+        "gmail_addresses": [
+            "kalyaniugale24@gmail.com"
+        ]
+    }
+}

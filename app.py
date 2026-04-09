@@ -10,7 +10,9 @@ from dotenv import load_dotenv
 from google import genai
 
 load_dotenv()
+from utils.auth import require_auth
 
+require_auth()
 BASE_DIR = Path(__file__).resolve().parent
 CHROMA_DIR = BASE_DIR / "chroma_data"
 COLLECTION_NAME = "org_memory"
