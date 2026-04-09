@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import List
 
@@ -39,10 +40,16 @@ class GeminiEmbeddingFunction(EmbeddingFunction):
         return embeddings
 
 
+def reset_chroma():
+    if CHROMA_DIR.exists():
+        shutil.rmtree(CHROMA_DIR)
+        print("Deleted old chroma_data directory")
+
+
 def get_collection():
     client = chromadb.PersistentClient(path=str(CHROMA_DIR))
     embedding_function = GeminiEmbeddingFunction(api_key=GEMINI_API_KEY)
-    collection = client.get_or_create_collection(
+    collection = client.create_collection(
         name=COLLECTION_NAME,
         embedding_function=embedding_function,
     )
@@ -125,6 +132,7 @@ def ingest_slack(collection):
             "source": "slack",
             "channel": str(msg.get("channel", "")),
             "user": str(msg.get("user", "unknown")),
+            "user_name": str(msg.get("user_name", msg.get("user", "unknown"))),
             "thread_ts": str(msg.get("thread_ts", "")),
             "ts": str(msg.get("ts", "")),
         }
@@ -211,7 +219,7 @@ def main():
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
     auto_fetch_sources()
-
+    reset_chroma()
     collection = get_collection()
 
     ingest_slack(collection)

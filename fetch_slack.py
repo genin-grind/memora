@@ -42,6 +42,31 @@ def get_channel_id(client: WebClient, channel_name: str) -> str | None:
     return None
 
 
+def fetch_users_map(client: WebClient) -> dict:
+    users_map = {}
+    cursor = None
+
+    while True:
+        response = client.users_list(limit=200, cursor=cursor)
+        members = response.get("members", [])
+
+        for member in members:
+            user_id = member.get("id")
+            profile = member.get("profile", {}) or {}
+            display_name = profile.get("display_name")
+            real_name = profile.get("real_name")
+            name = member.get("name")
+
+            best_name = display_name or real_name or name or user_id
+            users_map[user_id] = best_name
+
+        cursor = response.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+
+    return users_map
+
+
 def fetch_channel_messages(channel_name: str | None = None, limit: int = 100) -> list:
     client = _get_client()
     channel_name = channel_name or DEFAULT_CHANNEL_NAME
@@ -50,6 +75,8 @@ def fetch_channel_messages(channel_name: str | None = None, limit: int = 100) ->
         channel_id = get_channel_id(client, channel_name)
         if not channel_id:
             raise ValueError(f"Channel '{channel_name}' not found")
+
+        users_map = fetch_users_map(client)
 
         response = client.conversations_history(
             channel=channel_id,
@@ -60,11 +87,14 @@ def fetch_channel_messages(channel_name: str | None = None, limit: int = 100) ->
         structured_messages = []
 
         for msg in messages:
+            user_id = msg.get("user", "unknown")
+
             item = {
                 "source": "slack",
                 "channel": channel_name,
                 "channel_id": channel_id,
-                "user": msg.get("user", "unknown"),
+                "user": user_id,
+                "user_name": users_map.get(user_id, user_id),
                 "text": msg.get("text", ""),
                 "ts": msg.get("ts", ""),
                 "thread_ts": msg.get("thread_ts", msg.get("ts", "")),
@@ -74,12 +104,18 @@ def fetch_channel_messages(channel_name: str | None = None, limit: int = 100) ->
 
         output_dir = os.path.join("data", "raw")
         os.makedirs(output_dir, exist_ok=True)
-        file_path = os.path.join(output_dir, "slack_messages.json")
 
-        with open(file_path, "w", encoding="utf-8") as f:
+        messages_path = os.path.join(output_dir, "slack_messages.json")
+        users_path = os.path.join(output_dir, "slack_users.json")
+
+        with open(messages_path, "w", encoding="utf-8") as f:
             json.dump(structured_messages, f, indent=4, ensure_ascii=False)
 
-        print(f"Saved {len(structured_messages)} Slack messages to {file_path}")
+        with open(users_path, "w", encoding="utf-8") as f:
+            json.dump(users_map, f, indent=4, ensure_ascii=False)
+
+        print(f"Saved {len(structured_messages)} Slack messages to {messages_path}")
+        print(f"Saved {len(users_map)} Slack users to {users_path}")
         return structured_messages
 
     except SlackApiError as e:
