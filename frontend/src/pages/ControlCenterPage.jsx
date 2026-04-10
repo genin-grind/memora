@@ -1,6 +1,6 @@
 import { useState } from "react";
 import HeroPanel from "../components/HeroPanel";
-import { fetchSyncStatus, runSyncNow } from "../services/api";
+import { fetchSyncStatus, runSyncNow, uploadManualDocument } from "../services/api";
 import { useAsyncData } from "../services/useAsyncData";
 
 export default function ControlCenterPage() {
@@ -9,6 +9,8 @@ export default function ControlCenterPage() {
   const [runMessage, setRunMessage] = useState("");
   const [intervalChoice, setIntervalChoice] = useState(90);
   const [overrideStatus, setOverrideStatus] = useState(null);
+  const [uploadingKind, setUploadingKind] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
 
   const currentStatus = overrideStatus || data;
 
@@ -23,6 +25,30 @@ export default function ControlCenterPage() {
       setRunMessage(runError.message || "Unable to run sync right now.");
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function handleManualUpload(kind, file) {
+    if (!file) {
+      setUploadMessage("Choose a file first.");
+      return;
+    }
+
+    try {
+      setUploadingKind(kind);
+      setUploadMessage("");
+      const content = await file.text();
+      const result = await uploadManualDocument({
+        kind,
+        filename: file.name,
+        content,
+      });
+      setUploadMessage(result.message || "Document uploaded.");
+      setOverrideStatus(result.sync_status || null);
+    } catch (uploadError) {
+      setUploadMessage(uploadError.message || "Unable to upload the document right now.");
+    } finally {
+      setUploadingKind("");
     }
   }
 
@@ -167,6 +193,43 @@ export default function ControlCenterPage() {
                 <p>Meeting notes and final document</p>
               </div>
             </div>
+          </section>
+
+          <section className="minimal-card control-panel control-panel-wide">
+            <div className="panel-heading">
+              <p className="panel-kicker">Manual memory</p>
+              <h3>Upload meeting notes and decision documents</h3>
+            </div>
+            <p className="panel-copy">
+              Uploaded files are saved into organizational memory, counted in source status,
+              and available in Explorer and Memora queries.
+            </p>
+            <div className="control-upload-grid">
+              <div className="control-upload-card">
+                <p className="control-note-title">Meeting transcript</p>
+                <p className="control-upload-copy">Accepted best as `.txt` or plain-text transcript.</p>
+                <input
+                  type="file"
+                  accept=".txt,.md"
+                  onChange={(event) => handleManualUpload("meeting", event.target.files?.[0])}
+                />
+                <p className="control-upload-hint">Added to the meeting transcript library</p>
+              </div>
+              <div className="control-upload-card">
+                <p className="control-note-title">Final decision document</p>
+                <p className="control-upload-copy">Use a clean text version of the approved final artifact.</p>
+                <input
+                  type="file"
+                  accept=".txt,.md"
+                  onChange={(event) => handleManualUpload("final_document", event.target.files?.[0])}
+                />
+                <p className="control-upload-hint">Added to the decision document library</p>
+              </div>
+            </div>
+            {uploadingKind ? (
+              <p className="control-status-line">Uploading {uploadingKind.replace("_", " ")}...</p>
+            ) : null}
+            {uploadMessage ? <p className="success-text">{uploadMessage}</p> : null}
           </section>
         </div>
       </HeroPanel>

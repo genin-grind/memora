@@ -1141,6 +1141,37 @@ a {
   margin-bottom: 6px;
 }
 
+.control-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.control-upload-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background:
+    radial-gradient(circle at top right, rgba(17, 24, 39, 0.04), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(241, 237, 229, 0.9));
+}
+
+.control-upload-copy,
+.control-upload-hint {
+  margin: 0;
+  color: var(--muted);
+}
+
+.control-upload-card input[type="file"] {
+  width: 100%;
+  border: 1px dashed rgba(17, 24, 39, 0.16);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
 .analysis-ready-banner {
   margin-top: 20px;
   padding: 14px 18px;
@@ -1688,6 +1719,10 @@ a {
   .explorer-workspace,
   .control-hero-band,
   .control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .control-upload-grid {
     grid-template-columns: 1fr;
   }
 

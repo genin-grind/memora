@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -7,11 +8,14 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
+UPLOADS_DIR = RAW_DIR / "uploads"
 SYNC_STATE_PATH = DATA_DIR / "sync_state.json"
 
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
+from ingest import get_collection
+from ingest import ingest_text_file_once
 from ingest import run_incremental_ingestion
 
 
@@ -44,6 +48,35 @@ def _has_text_file(filename: str):
         return bool(path.read_text(encoding="utf-8").strip())
     except Exception:
         return False
+
+
+def _count_text_collection(kind: str, filename: str):
+    count = 1 if _has_text_file(filename) else 0
+    upload_dir = UPLOADS_DIR / kind
+    if upload_dir.exists():
+        count += len([path for path in upload_dir.iterdir() if path.is_file()])
+    return count
+
+
+def _chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150):
+    text = str(text or "").strip()
+    if not text:
+        return []
+
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = min(start + chunk_size, len(text))
+        chunks.append(text[start:end])
+        if end == len(text):
+            break
+        start = end - overlap
+    return chunks
+
+
+def _safe_slug(value: str):
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", str(value or "").strip()).strip("_").lower()
+    return slug or "upload"
 
 
 def get_sync_status():
@@ -97,16 +130,16 @@ def get_sync_status():
             {
                 "id": "meeting",
                 "label": "Meeting notes",
-                "status": "Present" if _has_text_file("meeting_notes.txt") else "Missing",
-                "count": 1 if _has_text_file("meeting_notes.txt") else 0,
-                "detail": "Static decision context document",
+                "status": "Present" if _count_text_collection("meeting", "meeting_notes.txt") > 0 else "Missing",
+                "count": _count_text_collection("meeting", "meeting_notes.txt"),
+                "detail": "Static decision context documents",
             },
             {
                 "id": "final_document",
                 "label": "Final document",
-                "status": "Present" if _has_text_file("final_document.txt") else "Missing",
-                "count": 1 if _has_text_file("final_document.txt") else 0,
-                "detail": "Final approved decision artifact",
+                "status": "Present" if _count_text_collection("final_document", "final_document.txt") > 0 else "Missing",
+                "count": _count_text_collection("final_document", "final_document.txt"),
+                "detail": "Final approved decision artifacts",
             },
         ],
         "interval_options": [60, 90, 120],
@@ -136,5 +169,62 @@ def run_sync_now():
             f"Gmail: {result.get('new_gmail', 0)} new."
         ),
         "result": result,
+        "sync_status": status,
+    }
+
+
+def upload_manual_document(kind: str, filename: str, content: str):
+    normalized_kind = (kind or "").strip().lower()
+    mapping = {
+        "meeting": ("meeting_notes.txt", "meeting", "Meeting notes"),
+        "final_document": ("final_document.txt", "final_document", "Final document"),
+    }
+
+    if normalized_kind not in mapping:
+        raise ValueError("Unsupported upload kind.")
+
+    clean_content = str(content or "").strip()
+    if not clean_content:
+        raise ValueError("Uploaded content is empty.")
+
+    target_filename, source_name, label = mapping[normalized_kind]
+    upload_dir = UPLOADS_DIR / normalized_kind
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = _safe_slug(Path(filename or source_name).stem)
+    extension = Path(filename or ".txt").suffix or ".txt"
+    stored_filename = f"{int(time.time())}_{safe_name}{extension}"
+    target_path = upload_dir / stored_filename
+    target_path.write_text(clean_content, encoding="utf-8")
+
+    previous_cwd = os.getcwd()
+    try:
+        os.chdir(BASE_DIR)
+        collection = get_collection()
+        chunks = _chunk_text(clean_content)
+        ids = [f"{source_name}_{_safe_slug(target_path.stem)}_{index}" for index, _ in enumerate(chunks, start=1)]
+        metadatas = [
+            {
+                "source": source_name,
+                "file_name": str(Path("uploads") / normalized_kind / stored_filename),
+                "chunk_index": index,
+            }
+            for index, _ in enumerate(chunks, start=1)
+        ]
+        if chunks:
+            collection.upsert(ids=ids, documents=chunks, metadatas=metadatas)
+        chunk_count = len(chunks)
+    finally:
+        os.chdir(previous_cwd)
+
+    status = get_sync_status()
+    return {
+        "status": "completed",
+        "message": f"{label} uploaded and indexed.",
+        "upload": {
+            "kind": normalized_kind,
+            "filename": filename or target_filename,
+            "saved_as": str(Path("uploads") / normalized_kind / stored_filename),
+            "chunk_count": chunk_count,
+        },
         "sync_status": status,
     }

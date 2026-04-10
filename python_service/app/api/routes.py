@@ -9,6 +9,7 @@ from app.services.org_service import get_source_status
 from app.services.query_service import analyze_query
 from app.services.sync_service import get_sync_status
 from app.services.sync_service import run_sync_now
+from app.services.sync_service import upload_manual_document
 
 
 router = APIRouter()
@@ -20,6 +21,12 @@ class LoginRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     question: str
+
+
+class UploadRequest(BaseModel):
+    kind: str
+    filename: str = ""
+    content: str
 
 
 @router.get("/health")
@@ -84,3 +91,13 @@ def sync_run():
 @router.get("/sync/status")
 def sync_status():
     return get_sync_status()
+
+
+@router.post("/sync/upload")
+def sync_upload(payload: UploadRequest):
+    try:
+        return upload_manual_document(payload.kind, payload.filename, payload.content)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=str(error)) from error

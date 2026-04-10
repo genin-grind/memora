@@ -4,6 +4,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 RAW_DIR = BASE_DIR / "data" / "raw"
+UPLOADS_DIR = RAW_DIR / "uploads"
 
 
 def _load_json_file(path: Path, default):
@@ -23,6 +24,28 @@ def _load_text_file(path: Path) -> str:
         return path.read_text(encoding="utf-8").strip()
     except Exception:
         return ""
+
+
+def _load_text_documents(kind: str, primary_filename: str):
+    documents = []
+    primary_path = RAW_DIR / primary_filename
+    primary_text = _load_text_file(primary_path)
+    if primary_text:
+        documents.append({"file_name": primary_filename, "content": primary_text})
+
+    upload_dir = UPLOADS_DIR / kind
+    if upload_dir.exists():
+        for path in sorted(upload_dir.iterdir(), reverse=True):
+            if path.is_file():
+                content = _load_text_file(path)
+                if content:
+                    documents.append(
+                        {
+                            "file_name": str(Path("uploads") / kind / path.name),
+                            "content": content,
+                        }
+                    )
+    return documents
 
 
 def _short_text(text: str, limit: int = 240) -> str:
@@ -95,7 +118,7 @@ def _gmail_records(gmail_messages):
 
 def _document_record(source_id: str, title: str, filename: str, content: str, badge: str):
     return {
-        "id": source_id,
+        "id": f"{source_id}-{filename}",
         "source": source_id,
         "title": title,
         "meta": filename,
@@ -111,37 +134,31 @@ def get_explorer_workspace():
     gmail_messages = _load_json_file(RAW_DIR / "gmail_messages.json", [])
     gmail_threads = _load_json_file(RAW_DIR / "gmail_threads.json", [])
     slack_users = _load_json_file(RAW_DIR / "slack_users.json", {})
-    meeting_notes = _load_text_file(RAW_DIR / "meeting_notes.txt")
-    final_document = _load_text_file(RAW_DIR / "final_document.txt")
+    meeting_notes = _load_text_documents("meeting", "meeting_notes.txt")
+    final_documents = _load_text_documents("final_document", "final_document.txt")
 
     slack_records = _slack_records(slack_messages, slack_users)
     gmail_records = _gmail_records(gmail_messages)
-    meeting_records = (
-        [
-            _document_record(
-                "meeting",
-                "Meeting Notes",
-                "meeting_notes.txt",
-                meeting_notes,
-                "Meeting",
-            )
-        ]
-        if meeting_notes
-        else []
-    )
-    final_document_records = (
-        [
-            _document_record(
-                "final_document",
-                "Final Decision Document",
-                "final_document.txt",
-                final_document,
-                "Final",
-            )
-        ]
-        if final_document
-        else []
-    )
+    meeting_records = [
+        _document_record(
+            "meeting",
+            "Meeting Notes",
+            item["file_name"],
+            item["content"],
+            "Meeting",
+        )
+        for item in meeting_notes
+    ]
+    final_document_records = [
+        _document_record(
+            "final_document",
+            "Final Decision Document",
+            item["file_name"],
+            item["content"],
+            "Final",
+        )
+        for item in final_documents
+    ]
 
     return {
         "metrics": {

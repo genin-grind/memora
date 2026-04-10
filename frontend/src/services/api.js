@@ -44,6 +44,13 @@ export function runSyncNow() {
   });
 }
 
+export function uploadManualDocument(payload) {
+  return request("/api/sync/upload", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function queryMemora(question) {
   return request("/api/memora/query", {
     method: "POST",

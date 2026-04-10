@@ -22,6 +22,7 @@ CHROMA_DIR = BASE_DIR / "chroma_data"
 COLLECTION_NAME = "org_memory"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 RAW_DIR = BASE_DIR / "data" / "raw"
+UPLOADS_DIR = RAW_DIR / "uploads"
 
 
 class GeminiEmbeddingFunction(EmbeddingFunction):
@@ -85,6 +86,28 @@ def _load_text_file(path: Path) -> str:
         return ""
 
 
+def _load_text_documents(kind: str, primary_filename: str):
+    documents = []
+    primary_path = RAW_DIR / primary_filename
+    primary_text = _load_text_file(primary_path)
+    if primary_text:
+        documents.append({"file_name": primary_filename, "content": primary_text})
+
+    upload_dir = UPLOADS_DIR / kind
+    if upload_dir.exists():
+        for path in sorted(upload_dir.iterdir()):
+            if path.is_file():
+                content = _load_text_file(path)
+                if content:
+                    documents.append(
+                        {
+                            "file_name": str(Path("uploads") / kind / path.name),
+                            "content": content,
+                        }
+                    )
+    return documents
+
+
 def _chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> list[str]:
     text = str(text or "").strip()
     if not text:
@@ -104,8 +127,8 @@ def _chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> list[s
 def _build_raw_memory_records() -> list[dict[str, Any]]:
     slack_messages = _load_json_file(RAW_DIR / "slack_messages.json", [])
     gmail_messages = _load_json_file(RAW_DIR / "gmail_messages.json", [])
-    meeting_notes = _load_text_file(RAW_DIR / "meeting_notes.txt")
-    final_document = _load_text_file(RAW_DIR / "final_document.txt")
+    meeting_notes = _load_text_documents("meeting", "meeting_notes.txt")
+    final_documents = _load_text_documents("final_document", "final_document.txt")
 
     records: list[dict[str, Any]] = []
 
@@ -152,31 +175,35 @@ def _build_raw_memory_records() -> list[dict[str, Any]]:
             }
         )
 
-    for index, chunk in enumerate(_chunk_text(meeting_notes), start=1):
-        records.append(
-            {
-                "id": f"meeting_{index}",
-                "document": chunk,
-                "metadata": {
-                    "source": "meeting",
-                    "file_name": "meeting_notes.txt",
-                    "chunk_index": index,
-                },
-            }
-        )
+    for item in meeting_notes:
+        file_stub = re.sub(r"[^a-z0-9]+", "_", Path(item["file_name"]).stem.lower()).strip("_") or "meeting"
+        for index, chunk in enumerate(_chunk_text(item["content"]), start=1):
+            records.append(
+                {
+                    "id": f"meeting_{file_stub}_{index}",
+                    "document": chunk,
+                    "metadata": {
+                        "source": "meeting",
+                        "file_name": item["file_name"],
+                        "chunk_index": index,
+                    },
+                }
+            )
 
-    for index, chunk in enumerate(_chunk_text(final_document), start=1):
-        records.append(
-            {
-                "id": f"final_document_{index}",
-                "document": chunk,
-                "metadata": {
-                    "source": "final_document",
-                    "file_name": "final_document.txt",
-                    "chunk_index": index,
-                },
-            }
-        )
+    for item in final_documents:
+        file_stub = re.sub(r"[^a-z0-9]+", "_", Path(item["file_name"]).stem.lower()).strip("_") or "final_document"
+        for index, chunk in enumerate(_chunk_text(item["content"]), start=1):
+            records.append(
+                {
+                    "id": f"final_document_{file_stub}_{index}",
+                    "document": chunk,
+                    "metadata": {
+                        "source": "final_document",
+                        "file_name": item["file_name"],
+                        "chunk_index": index,
+                    },
+                }
+            )
 
     return records
 
@@ -495,7 +522,7 @@ def analyze_query(user_query: str) -> dict[str, Any]:
 
     prompt = build_reasoning_prompt(user_query, ids, metas, docs)
     response = genai_client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         contents=prompt,
     )
     answer_text = response.text if hasattr(response, "text") else str(response)

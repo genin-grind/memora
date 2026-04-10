@@ -6,6 +6,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
+UPLOADS_DIR = RAW_DIR / "uploads"
 ORG_CONFIG_PATH = DATA_DIR / "org_config.json"
 
 
@@ -26,6 +27,28 @@ def _load_text_file(path: Path) -> str:
         return path.read_text(encoding="utf-8").strip()
     except Exception:
         return ""
+
+
+def _collect_text_documents(kind: str, primary_filename: str):
+    documents = []
+    primary_path = RAW_DIR / primary_filename
+    primary_text = _load_text_file(primary_path)
+    if primary_text:
+        documents.append({"file_name": primary_filename, "content": primary_text})
+
+    upload_dir = UPLOADS_DIR / kind
+    if upload_dir.exists():
+        for path in sorted(upload_dir.iterdir()):
+            if path.is_file():
+                content = _load_text_file(path)
+                if content:
+                    documents.append(
+                        {
+                            "file_name": str(Path("uploads") / kind / path.name),
+                            "content": content,
+                        }
+                    )
+    return documents
 
 
 def _load_org_name() -> str:
@@ -80,8 +103,8 @@ def get_org_summary():
     gmail_messages = _load_json_file(RAW_DIR / "gmail_messages.json", [])
     gmail_threads = _load_json_file(RAW_DIR / "gmail_threads.json", [])
     slack_users = _load_json_file(RAW_DIR / "slack_users.json", {})
-    meeting_notes = _load_text_file(RAW_DIR / "meeting_notes.txt")
-    final_document = _load_text_file(RAW_DIR / "final_document.txt")
+    meeting_notes = _collect_text_documents("meeting", "meeting_notes.txt")
+    final_documents = _collect_text_documents("final_document", "final_document.txt")
 
     slack_people = _collect_slack_people(slack_messages, slack_users)
     gmail_senders = _collect_gmail_senders(gmail_messages)
@@ -105,26 +128,23 @@ def get_org_summary():
             "id": "meeting",
             "label": "Meeting notes",
             "available": bool(meeting_notes),
-            "detail": "Transcript available" if meeting_notes else "Transcript missing",
+            "detail": f"{len(meeting_notes)} transcript file(s)" if meeting_notes else "Transcript missing",
             "weight": "Consensus layer",
         },
         {
             "id": "document",
             "label": "Final document",
-            "available": bool(final_document),
-            "detail": "Decision artifact present" if final_document else "Decision artifact missing",
+            "available": bool(final_documents),
+            "detail": f"{len(final_documents)} decision artifact(s)" if final_documents else "Decision artifact missing",
             "weight": "Highest authority",
         },
     ]
 
     indexed_artifacts = len(slack_messages) + len(gmail_messages) + len(gmail_threads)
     decision_record_count = 0
-    if meeting_notes:
-        indexed_artifacts += 1
-        decision_record_count += 1
-    if final_document:
-        indexed_artifacts += 1
-        decision_record_count += 1
+    indexed_artifacts += len(meeting_notes)
+    indexed_artifacts += len(final_documents)
+    decision_record_count += len(meeting_notes) + len(final_documents)
 
     top_channels = Counter(
         str(message.get("channel", "")).strip()
@@ -147,7 +167,7 @@ def get_org_summary():
         "gmail_threads": len(gmail_threads),
         "indexed_artifacts": indexed_artifacts,
         "has_meeting_notes": bool(meeting_notes),
-        "has_final_document": bool(final_document),
+        "has_final_document": bool(final_documents),
         "coverage_score": coverage_score,
         "available_source_count": available_source_count,
         "source_count": len(connected_sources),
@@ -162,7 +182,7 @@ def get_org_summary():
             asset
             for asset, available in (
                 ("Meeting Notes", bool(meeting_notes)),
-                ("Final Decision Document", bool(final_document)),
+                ("Final Decision Document", bool(final_documents)),
             )
             if available
         ],
@@ -189,7 +209,7 @@ def get_org_summary():
                         asset
                         for asset, available in (
                             ("Meeting Notes", bool(meeting_notes)),
-                            ("Final Document", bool(final_document)),
+                            ("Final Document", bool(final_documents)),
                         )
                         if available
                     ]
