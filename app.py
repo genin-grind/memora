@@ -9,10 +9,32 @@ from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 from dotenv import load_dotenv
 from google import genai
 
+st.set_page_config(
+    page_title="Memora | Organizational Reasoning Engine",
+    page_icon="🧠",
+    layout="wide",
+)
+
 load_dotenv()
 from utils.auth import require_auth
 
 require_auth()
+
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 👤 Profile")
+    st.write(f"**{st.session_state.user_name}**")
+    st.caption(st.session_state.user_email)
+    st.caption(f"Role: {st.session_state.user_role}")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.user_name = ""
+        st.session_state.org_name = ""
+        st.session_state.user_role = "Member"
+        st.switch_page("pages/1_Login.py")
+
 BASE_DIR = Path(__file__).resolve().parent
 CHROMA_DIR = BASE_DIR / "chroma_data"
 COLLECTION_NAME = "org_memory"
@@ -48,151 +70,286 @@ collection = chroma_client.get_or_create_collection(
     embedding_function=embedding_function,
 )
 
-st.set_page_config(
-    page_title="Memora | Organizational Reasoning Engine",
-    page_icon="🧠",
-    layout="wide",
-)
+st.markdown("""
+<style>
+:root {
+    --bg: #0b1020;
+    --panel: #121a2b;
+    --panel-2: #182235;
+    --border: rgba(255,255,255,0.08);
+    --text: #f3f4f6;
+    --muted: #9aa4b2;
+    --accent: #7c3aed;
+    --accent-2: #06b6d4;
+    --success: #22c55e;
+    --warning: #f59e0b;
+}
 
-st.markdown(
-    """
-    <style>
-        .main {
-            padding-top: 1.2rem;
-        }
-        .hero-box {
-            padding: 1.2rem 1.4rem;
-            border-radius: 18px;
-            background: linear-gradient(135deg, rgba(99,102,241,0.14), rgba(16,185,129,0.10));
-            border: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 1rem;
-        }
-        .hero-title {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 0.25rem;
-        }
-        .hero-subtitle {
-            color: #b8bfd0;
-            font-size: 0.98rem;
-        }
-        .metric-card {
-            padding: 0.9rem 1rem;
-            border-radius: 16px;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.07);
-            text-align: center;
-        }
-        .metric-label {
-            font-size: 0.82rem;
-            color: #a7b0c0;
-            margin-bottom: 0.2rem;
-        }
-        .metric-value {
-            font-size: 1.35rem;
-            font-weight: 700;
-        }
-        .answer-box {
-            padding: 1.1rem 1.2rem;
-            border-radius: 18px;
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 1rem;
-        }
-        .source-card {
-            padding: 1rem 1rem 0.8rem 1rem;
-            border-radius: 16px;
-            background: rgba(255,255,255,0.025);
-            border: 1px solid rgba(255,255,255,0.08);
-            margin-bottom: 0.9rem;
-        }
-        .source-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.6rem;
-            flex-wrap: wrap;
-        }
-        .source-title {
-            font-weight: 700;
-            font-size: 1rem;
-        }
-        .badge {
-            display: inline-block;
-            padding: 0.18rem 0.55rem;
-            border-radius: 999px;
-            font-size: 0.74rem;
-            font-weight: 700;
-            margin-right: 0.35rem;
-            margin-bottom: 0.25rem;
-        }
-        .badge-slack {
-            background: rgba(168, 85, 247, 0.18);
-            color: #d8b4fe;
-            border: 1px solid rgba(168, 85, 247, 0.35);
-        }
-        .badge-gmail {
-            background: rgba(239, 68, 68, 0.16);
-            color: #fca5a5;
-            border: 1px solid rgba(239, 68, 68, 0.35);
-        }
-        .badge-meeting {
-            background: rgba(59, 130, 246, 0.16);
-            color: #93c5fd;
-            border: 1px solid rgba(59, 130, 246, 0.35);
-        }
-        .badge-final {
-            background: rgba(16, 185, 129, 0.16);
-            color: #86efac;
-            border: 1px solid rgba(16, 185, 129, 0.35);
-        }
-        .badge-rank {
-            background: rgba(255,255,255,0.06);
-            color: #d1d5db;
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-        .source-meta {
-            color: #a7b0c0;
-            font-size: 0.84rem;
-            margin-bottom: 0.55rem;
-        }
-        .snippet-box {
-            padding: 0.8rem 0.9rem;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.03);
-            border-left: 4px solid rgba(99,102,241,0.7);
-            font-size: 0.93rem;
-            margin-bottom: 0.7rem;
-        }
-        .timeline-item {
-            padding: 0.85rem 1rem;
-            border-left: 3px solid rgba(99,102,241,0.65);
-            margin-left: 0.35rem;
-            margin-bottom: 0.75rem;
-            background: rgba(255,255,255,0.02);
-            border-radius: 0 12px 12px 0;
-        }
-        .timeline-title {
-            font-weight: 700;
-            margin-bottom: 0.25rem;
-        }
-        .small-muted {
-            color: #9aa3b2;
-            font-size: 0.82rem;
-        }
-        .status-good {
-            color: #86efac;
-            font-weight: 600;
-        }
-        .status-info {
-            color: #93c5fd;
-            font-weight: 600;
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+.stApp {
+    background:
+        radial-gradient(circle at top left, rgba(124,58,237,0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(6,182,212,0.12), transparent 24%),
+        linear-gradient(180deg, #0a0f1d 0%, #0b1020 100%);
+    color: var(--text);
+}
+
+.block-container {
+    padding-top: 1.2rem;
+    padding-bottom: 2rem;
+    max-width: 1400px;
+}
+
+[data-testid="stHeader"] {
+    background: rgba(0,0,0,0);
+}
+
+[data-testid="stToolbar"] {
+    right: 1rem;
+}
+
+.main-hero {
+    padding: 1.05rem 1.3rem;
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(124,58,237,0.18), rgba(6,182,212,0.10));
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+    margin-bottom: 1rem;
+}
+
+.hero-title {
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: white;
+    margin-bottom: 0.25rem;
+}
+
+.hero-subtitle {
+    color: #c7d2fe;
+    font-size: 0.93rem;
+    line-height: 1.45;
+}
+
+.glass-card {
+    background: rgba(18, 26, 43, 0.82);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 1.1rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+    backdrop-filter: blur(10px);
+    margin-top: 0 !important;
+}
+
+div[data-testid="column"] > div:has(.glass-card) {
+    margin-top: 0 !important;
+}
+
+.metric-shell {
+    background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 1rem;
+    text-align: left;
+    min-height: 92px;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+}
+
+.metric-value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: white;
+}
+
+.section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 0.7rem;
+}
+
+.muted-text {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.answer-panel {
+    background: rgba(18,26,43,0.88);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 1.2rem;
+    line-height: 1.7;
+    color: #e5e7eb;
+}
+
+.source-card {
+    background: rgba(255,255,255,0.025);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 1rem;
+    margin-bottom: 0.9rem;
+}
+
+.source-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 0.35rem;
+}
+
+.source-meta {
+    color: var(--muted);
+    font-size: 0.83rem;
+    margin-bottom: 0.7rem;
+}
+
+.snippet {
+    background: rgba(255,255,255,0.03);
+    border-left: 4px solid rgba(124,58,237,0.85);
+    border-radius: 12px;
+    padding: 0.85rem;
+    color: #dde5f0;
+    margin-bottom: 0.8rem;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.24rem 0.62rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    margin-right: 0.35rem;
+    margin-bottom: 0.25rem;
+}
+
+.badge-slack { background: rgba(168,85,247,0.16); color: #e9d5ff; border: 1px solid rgba(168,85,247,0.30); }
+.badge-gmail { background: rgba(239,68,68,0.14); color: #fecaca; border: 1px solid rgba(239,68,68,0.28); }
+.badge-meeting { background: rgba(59,130,246,0.16); color: #bfdbfe; border: 1px solid rgba(59,130,246,0.28); }
+.badge-final { background: rgba(34,197,94,0.14); color: #bbf7d0; border: 1px solid rgba(34,197,94,0.28); }
+.badge-rank { background: rgba(255,255,255,0.05); color: #d1d5db; border: 1px solid rgba(255,255,255,0.09); }
+
+.timeline-item {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-left: 4px solid rgba(6,182,212,0.8);
+    border-radius: 16px;
+    padding: 1rem;
+    margin-bottom: 0.8rem;
+}
+
+.pipeline-step {
+    padding: 0.8rem 0.9rem;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 0.65rem;
+    color: #dbeafe;
+    line-height: 1.45;
+}
+
+div[data-testid="stTextArea"] textarea {
+    background: rgba(10,15,29,0.92) !important;
+    color: white !important;
+    border-radius: 16px !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    padding: 1rem !important;
+    font-size: 1rem !important;
+}
+
+div[data-testid="stTextArea"] label {
+    color: #cbd5e1 !important;
+}
+
+div[data-testid="stSelectbox"] > div {
+    border-radius: 14px !important;
+}
+
+div[data-testid="stSelectbox"] > div > div {
+    background: rgba(10,15,29,0.92) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    border-radius: 14px !important;
+}
+
+div[data-testid="stSelectbox"] label {
+    color: #cbd5e1 !important;
+}
+
+div.stButton > button {
+    border-radius: 14px !important;
+    font-weight: 700 !important;
+    border: 1px solid rgba(124,58,237,0.35) !important;
+    background: linear-gradient(135deg, rgba(124,58,237,0.95), rgba(6,182,212,0.85)) !important;
+    color: white !important;
+    min-height: 46px;
+}
+
+div[data-testid="stTabs"] button {
+    border-radius: 12px 12px 0 0 !important;
+}
+
+.stExpander {
+    border: 1px solid var(--border) !important;
+    border-radius: 16px !important;
+    background: rgba(255,255,255,0.02) !important;
+}
+
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #151826 0%, #1a1f2e 100%);
+    border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+[data-testid="stSidebar"] * {
+    color: #e5e7eb;
+}
+
+[data-testid="stSidebarNav"] {
+    padding-top: 1rem;
+}
+
+[data-testid="stSidebarNav"]::before {
+    content: "MEMORA";
+    display: block;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: white;
+    padding: 0.5rem 1rem 1rem 1rem;
+    letter-spacing: 0.04em;
+}
+
+[data-testid="stSidebarNav"] a {
+    border-radius: 12px;
+    margin: 0.15rem 0.6rem;
+    padding: 0.2rem 0.4rem;
+}
+
+[data-testid="stSidebarNav"] a:hover {
+    background: rgba(124,58,237,0.14);
+}
+
+[data-testid="stSidebarNav"] a[aria-current="page"] {
+    background: rgba(255,255,255,0.08);
+}
+
+h3 {
+    margin-bottom: 0.45rem !important;
+}
+
+p, label {
+    color: #cbd5e1;
+}
+
+hr {
+    border-color: rgba(255,255,255,0.08);
+}
+
+div[data-testid="stMarkdownContainer"] p {
+    line-height: 1.5;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 def get_source_badge(source: str) -> str:
@@ -350,27 +507,28 @@ if "selected_source_id" not in st.session_state:
     st.session_state.selected_source_id = None
 
 
-st.markdown(
-    """
-    <div class="hero-box">
-        <div class="hero-title">🧠 Memora: Organizational Reasoning Engine</div>
-        <div class="hero-subtitle">
-            Reconstruct decisions across Slack, Gmail, meetings, and final documents with transparent evidence.
-        </div>
+st.markdown("""
+<div class="main-hero">
+    <div class="hero-title">Memora</div>
+    <div class="hero-subtitle">
+        Organizational decision intelligence across Slack, Gmail, meeting notes, and final documents.
+        Ask one question and trace how the final decision was formed.
     </div>
-    """,
-    unsafe_allow_html=True,
-)
+</div>
+""", unsafe_allow_html=True)
 
-left_top, right_top = st.columns([1.3, 2])
+left_top, right_top = st.columns([1.2, 0.8], gap="medium")
 
 with left_top:
-    st.markdown("### Ask a decision question")
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Ask a decision question</div>', unsafe_allow_html=True)
+    st.markdown('<div class="muted-text">Query your organizational memory and reconstruct why a decision was made.</div>', unsafe_allow_html=True)
+
     user_query = st.text_area(
         "Question",
         value=st.session_state.last_query,
         placeholder="Why did we choose FastAPI over MERN/Node?",
-        height=100,
+        height=120,
         label_visibility="collapsed",
     )
 
@@ -381,29 +539,24 @@ with left_top:
         "What was finalized in the meeting?",
         "What is the final project scope?",
     ]
-    selected_example = st.selectbox("Quick examples", [""] + examples)
+    selected_example = st.selectbox("Try an example", [""] + examples)
 
     if selected_example and not user_query:
         user_query = selected_example
 
     analyze = st.button("Analyze Decision", use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 with right_top:
-    st.markdown("### Agentic flow")
-    st.markdown(
-        """
-        <div class="answer-box">
-            <div class="small-muted">System pipeline</div>
-            <div style="margin-top: 0.5rem;">
-                <span class="status-info">Ingestion Agent</span> → Collects Slack, Gmail, meeting notes, final document<br>
-                <span class="status-info">Retrieval Agent</span> → Finds relevant evidence from ChromaDB<br>
-                <span class="status-info">Reasoning Agent</span> → Synthesizes cross-source explanation using Gemini<br>
-                <span class="status-good">Traceability Layer</span> → Shows supporting evidence and source trail
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">How Memora works</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="pipeline-step"><b>1. Retrieval</b> — Finds relevant evidence from ChromaDB.</div>
+    <div class="pipeline-step"><b>2. Ranking</b> — Prioritizes stronger organizational sources.</div>
+    <div class="pipeline-step"><b>3. Reasoning</b> — Synthesizes a grounded answer with Gemini.</div>
+    <div class="pipeline-step"><b>4. Traceability</b> — Shows evidence, timeline, and provenance.</div>
+    """, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 if analyze and user_query.strip():
     st.session_state.selected_source_id = None
@@ -513,47 +666,39 @@ if st.session_state.last_answer:
     ids = st.session_state.last_ids
     answer_text = st.session_state.last_answer
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4, gap="medium")
+
     with c1:
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Evidence Retrieved</div>
-                <div class="metric-value">{len(docs)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"""
+        <div class="metric-shell">
+            <div class="metric-label">Evidence Retrieved</div>
+            <div class="metric-value">{len(docs)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
     with c2:
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Source Types</div>
-                <div class="metric-value">{count_unique_sources(metas)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"""
+        <div class="metric-shell">
+            <div class="metric-label">Source Types</div>
+            <div class="metric-value">{count_unique_sources(metas)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
     with c3:
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Strongest Source</div>
-                <div class="metric-value" style="font-size:1rem;">{strongest_source_label(metas)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"""
+        <div class="metric-shell">
+            <div class="metric-label">Strongest Source</div>
+            <div class="metric-value" style="font-size:1rem;">{strongest_source_label(metas)}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
     with c4:
-        st.markdown(
-            f"""
-            <div class="metric-card">
-                <div class="metric-label">Confidence</div>
-                <div class="metric-value">{infer_confidence(metas)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"""
+        <div class="metric-shell">
+            <div class="metric-label">Confidence</div>
+            <div class="metric-value">{infer_confidence(metas)}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     tab1, tab2, tab3, tab4 = st.tabs(
         ["Decision Answer", "Evidence Cards", "Reasoning Timeline", "Raw Trace"]
@@ -563,7 +708,7 @@ if st.session_state.last_answer:
         st.markdown("### Decision Analysis")
         st.markdown(
             f"""
-            <div class="answer-box">
+            <div class="answer-panel">
                 {answer_text.replace("\n", "<br>")}
             </div>
             """,
@@ -603,12 +748,10 @@ if st.session_state.last_answer:
                 st.markdown(
                     f"""
                     <div class="source-card">
-                        <div class="source-header">
-                            <div class="source-title">{selected_label}</div>
-                            <div>{get_source_badge(selected_source)}</div>
-                        </div>
+                        <div class="source-title">{selected_label}</div>
+                        <div style="margin-bottom:0.5rem;">{get_source_badge(selected_source)}</div>
                         <div class="source-meta">{get_display_meta(selected_source, selected_meta)}</div>
-                        <div class="snippet-box">{clean_snippet(selected_doc, 500)}</div>
+                        <div class="snippet">{clean_snippet(selected_doc, 500)}</div>
                         <div><b>Why it matters:</b> {explain_source_relevance(selected_source, selected_meta)}</div>
                     </div>
                     """,
@@ -633,15 +776,13 @@ if st.session_state.last_answer:
             st.markdown(
                 f"""
                 <div class="source-card">
-                    <div class="source-header">
-                        <div class="source-title">Source {i} · {get_human_source_label(doc_id, meta)}</div>
-                        <div>
-                            {badge_html}
-                            <span class="badge badge-rank">Rank #{i}</span>
-                        </div>
+                    <div class="source-title">Source {i} · {get_human_source_label(doc_id, meta)}</div>
+                    <div style="margin-bottom:0.5rem;">
+                        {badge_html}
+                        <span class="badge badge-rank">Rank #{i}</span>
                     </div>
                     <div class="source-meta">{display_meta}</div>
-                    <div class="snippet-box">{snippet}</div>
+                    <div class="snippet">{snippet}</div>
                     <div><b>Why it matters:</b> {relevance_note}</div>
                 </div>
                 """,
@@ -662,8 +803,8 @@ if st.session_state.last_answer:
             st.markdown(
                 f"""
                 <div class="timeline-item">
-                    <div class="timeline-title">{get_source_badge(item["source"])} {item["title"]}</div>
-                    <div class="small-muted" style="margin-bottom:0.45rem;">{item["meta"]}</div>
+                    <div class="source-title">{get_source_badge(item["source"])} {item["title"]}</div>
+                    <div class="source-meta">{item["meta"]}</div>
                     <div>{item["text"]}</div>
                 </div>
                 """,
@@ -681,4 +822,10 @@ if st.session_state.last_answer:
             st.code(doc)
 
 else:
-    st.info("Ask a question and click **Analyze Decision** to see reasoning, evidence cards, and a source timeline.")
+    st.markdown("""
+    <div class="glass-card" style="padding:0.9rem 1rem; margin-top:0.8rem;">
+        <div class="muted-text">
+            Ask a question to generate a grounded decision answer with evidence cards and a timeline.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
