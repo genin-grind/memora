@@ -8,6 +8,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [email, setEmail] = useState("");
+  const [accessKey, setAccessKey] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,7 +26,7 @@ export default function LoginPage() {
     setMessage("");
 
     try {
-      const result = await loginWithEmail(email);
+      const result = await loginWithEmail(email, accessKey);
       storeUser(result.user);
       setMessage(`Access granted for ${result.user.name}`);
       const destination = location.state?.from || "/organization";
@@ -43,8 +44,8 @@ export default function LoginPage() {
     <div className="page page-login">
       <HeroPanel
         eyebrow="Secure Entry"
-        title="Quiet, secure access to your organization memory."
-        description="A cleaner protected entry flow for the product demo. Sign in with a verified org email to unlock the workspace."
+        title="Secure entry to the Memora organization workspace."
+        description="Use your verified organization email and your organization access key to unlock the workspace."
       >
         <div className="login-layout">
           <form className="minimal-card login-card" onSubmit={handleSubmit}>
@@ -53,7 +54,7 @@ export default function LoginPage() {
               <h3>Sign in</h3>
             </div>
             <p className="panel-copy">
-              Use an email already present in your organization sources.
+              Enter your organization email and your organization access key.
             </p>
             <label className="field-label" htmlFor="email">
               Organization Email
@@ -65,6 +66,17 @@ export default function LoginPage() {
               placeholder="name@company.com"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+            />
+            <label className="field-label" htmlFor="accessKey">
+              Organization Access Key
+            </label>
+            <input
+              id="accessKey"
+              className="input"
+              type="password"
+              placeholder="Organization-issued access key"
+              value={accessKey}
+              onChange={(event) => setAccessKey(event.target.value)}
             />
             <button className="primary-button" type="submit" disabled={loading}>
               {loading ? "Verifying" : "Continue"}
@@ -80,18 +92,18 @@ export default function LoginPage() {
                 <h3>Organization Workspace</h3>
               </div>
               <p className="panel-copy">
-                Access the internal dashboard, source explorer, and the decision
-                reasoning workspace after verification.
+                Access the internal dashboard, source explorer, control room, and
+                the decision reasoning workspace after verification.
               </p>
             </div>
             <div className="minimal-card">
               <div className="panel-heading">
-                <p className="panel-kicker">Current State</p>
-                <h3>Phase One</h3>
+                <p className="panel-kicker">Access Model</p>
+                <h3>Organization-issued entry</h3>
               </div>
               <p className="panel-copy">
-                This is the first gated slice, not the full product yet. Next we
-                wire the main Memora reasoning flow into the new UI.
+                Only verified members with the organization access key can enter the
+                workspace.
               </p>
             </div>
           </div>

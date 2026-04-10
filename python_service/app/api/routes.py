@@ -17,6 +17,7 @@ router = APIRouter()
 
 class LoginRequest(BaseModel):
     email: str
+    access_key: str
 
 
 class QueryRequest(BaseModel):
@@ -51,7 +52,7 @@ def explorer_workspace():
 
 @router.post("/auth/login")
 def login(payload: LoginRequest):
-    allowed, message, user = validate_org_user(payload.email)
+    allowed, message, user = validate_org_user(payload.email, payload.access_key)
     if not allowed:
         raise HTTPException(status_code=403, detail=message)
 

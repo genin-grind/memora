@@ -1,12 +1,18 @@
 import json
+import os
 import re
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 DATA_DIR = BASE_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 ORG_CONFIG_PATH = DATA_DIR / "org_config.json"
+load_dotenv(BASE_DIR / ".env")
+
+MEMORA_ACCESS_KEY = os.getenv("MEMORA_ACCESS_KEY", "Memora-Access-2026")
 
 
 def _safe_read_json(path: Path, default):
@@ -79,7 +85,7 @@ def collect_known_people():
     return people
 
 
-def validate_org_user(email: str):
+def validate_org_user(email: str, access_key: str):
     org_config = load_org_config()
     known_org_emails = collect_known_org_emails()
     known_people = collect_known_people()
@@ -87,6 +93,12 @@ def validate_org_user(email: str):
     clean_email = email.lower().strip()
     if not clean_email or "@" not in clean_email:
         return False, "Enter a valid organization email.", None
+
+    if not str(access_key or "").strip():
+        return False, "Enter your Memora access key.", None
+
+    if str(access_key).strip() != MEMORA_ACCESS_KEY:
+        return False, "Invalid Memora access key.", None
 
     domain = clean_email.split("@")[-1].lower()
     allowed_domains = [item.lower() for item in org_config.get("allowed_domains", [])]

@@ -19,10 +19,10 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function loginWithEmail(email) {
+export function loginWithEmail(email, accessKey) {
   return request("/api/auth/login", {
     method: "POST",
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, access_key: accessKey }),
   });
 }
 
