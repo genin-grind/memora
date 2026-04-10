@@ -5,12 +5,12 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 SLACK_BOT_TOKEN = os.getenv("SLACK_TOKEN")
 DEFAULT_CHANNEL_NAME = os.getenv("SLACK_CHANNEL", "all-memora-labs")
 
-BASE_DIR = Path(__file__).resolve().parent
 RAW_DIR = BASE_DIR / "data" / "raw"
 SYNC_STATE_PATH = BASE_DIR / "data" / "sync_state.json"
 

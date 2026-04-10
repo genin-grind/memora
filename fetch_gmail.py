@@ -11,14 +11,17 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-load_dotenv()
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 DEFAULT_GROUP_EMAIL = os.getenv("GMAIL_GROUP", "memora-labs@googlegroups.com")
+RECENT_QUERY_WINDOW = "30d"
 
-BASE_DIR = Path(__file__).resolve().parent
 RAW_DIR = BASE_DIR / "data" / "raw"
 SYNC_STATE_PATH = BASE_DIR / "data" / "sync_state.json"
+TOKEN_PATH = BASE_DIR / "token.json"
+CREDENTIALS_PATH = BASE_DIR / "credentials.json"
 
 
 def load_sync_state():
@@ -57,20 +60,20 @@ def save_threads(grouped_threads):
 def authenticate_gmail():
     creds = None
 
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if TOKEN_PATH.exists():
+        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                "credentials.json",
+                str(CREDENTIALS_PATH),
                 SCOPES,
             )
             creds = flow.run_local_server(port=0)
 
-        with open("token.json", "w", encoding="utf-8") as token_file:
+        with open(TOKEN_PATH, "w", encoding="utf-8") as token_file:
             token_file.write(creds.to_json())
 
     return build("gmail", "v1", credentials=creds)
@@ -162,21 +165,23 @@ def search_messages(service, query, max_results):
 def fetch_group_emails_incremental(service, group_email=None, max_results=50):
     group_email = group_email or DEFAULT_GROUP_EMAIL
     state = load_sync_state()
-    last_fetch_epoch = int(state.get("gmail", {}).get("last_fetch_epoch", 0))
+    queries = [
+        f"list:{group_email} newer_than:{RECENT_QUERY_WINDOW}",
+        f"(to:{group_email} OR from:{group_email} OR cc:{group_email} OR deliveredto:{group_email}) newer_than:{RECENT_QUERY_WINDOW}",
+        f"\"{group_email}\" newer_than:{RECENT_QUERY_WINDOW}",
+    ]
 
-    primary_query = f"list:{group_email}"
-    fallback_query = f"(to:{group_email} OR from:{group_email})"
+    messages_by_id = {}
+    used_query = queries[0]
 
-    if last_fetch_epoch > 0:
-        primary_query += f" after:{last_fetch_epoch}"
-        fallback_query += f" after:{last_fetch_epoch}"
+    for query in queries:
+        matches = search_messages(service, query, max_results)
+        if matches and used_query == queries[0]:
+            used_query = query
+        for match in matches:
+            messages_by_id[match["id"]] = match
 
-    messages = search_messages(service, primary_query, max_results)
-    used_query = primary_query
-
-    if not messages:
-        messages = search_messages(service, fallback_query, max_results)
-        used_query = fallback_query
+    messages = list(messages_by_id.values())
 
     existing_emails = load_existing_emails()
     existing_ids = {email.get("message_id") for email in existing_emails}
@@ -244,6 +249,7 @@ def fetch_group_emails_incremental(service, group_email=None, max_results=50):
     save_emails(merged_emails)
     save_threads(list(grouped_threads.values()))
 
+    state.setdefault("gmail", {})
     state["gmail"]["last_fetch_epoch"] = int(datetime.now(timezone.utc).timestamp())
     save_sync_state(state)
 

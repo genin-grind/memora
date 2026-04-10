@@ -1,0 +1,13 @@
+{
+  "name": "memora-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup": "npm install && npm install --prefix backend && npm install --prefix frontend && python -m pip install -r requirements.txt && python -m pip install -r python_service/requirements.txt",
+    "dev": "npx concurrently -k -n python,backend,frontend -c cyan,green,magenta \"powershell -NoProfile -Command \\\"Set-Location 'python_service'; uvicorn app.main:app --reload --port 8000\\\"\" \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "bootstrap": "npm run setup && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

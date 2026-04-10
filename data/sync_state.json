@@ -3,6 +3,9 @@
         "last_ts": "1775814895.969879"
     },
     "gmail": {
-        "last_fetch_epoch": 1775816537
+        "last_fetch_epoch": 1775843538
+    },
+    "app": {
+        "last_manual_sync_epoch": 1775843531
     }
 }
