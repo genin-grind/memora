@@ -1,7 +1,9 @@
 import os
 import json
 import base64
+from pathlib import Path
 from html import unescape
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
@@ -13,6 +15,43 @@ load_dotenv()
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 DEFAULT_GROUP_EMAIL = os.getenv("GMAIL_GROUP", "memora-labs@googlegroups.com")
+
+BASE_DIR = Path(__file__).resolve().parent
+RAW_DIR = BASE_DIR / "data" / "raw"
+SYNC_STATE_PATH = BASE_DIR / "data" / "sync_state.json"
+
+
+def load_sync_state():
+    if not SYNC_STATE_PATH.exists():
+        return {"slack": {"last_ts": "0"}, "gmail": {"last_fetch_epoch": 0}}
+    with open(SYNC_STATE_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_sync_state(state):
+    SYNC_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(SYNC_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=4)
+
+
+def load_existing_emails():
+    path = RAW_DIR / "gmail_messages.json"
+    if not path.exists():
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_emails(emails):
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    with open(RAW_DIR / "gmail_messages.json", "w", encoding="utf-8") as f:
+        json.dump(emails, f, indent=4, ensure_ascii=False)
+
+
+def save_threads(grouped_threads):
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    with open(RAW_DIR / "gmail_threads.json", "w", encoding="utf-8") as f:
+        json.dump(grouped_threads, f, indent=4, ensure_ascii=False)
 
 
 def authenticate_gmail():
@@ -120,11 +159,17 @@ def search_messages(service, query, max_results):
     return results.get("messages", [])
 
 
-def fetch_group_emails(service, group_email: str | None = None, max_results: int = 50) -> list:
+def fetch_group_emails_incremental(service, group_email=None, max_results=50):
     group_email = group_email or DEFAULT_GROUP_EMAIL
+    state = load_sync_state()
+    last_fetch_epoch = int(state.get("gmail", {}).get("last_fetch_epoch", 0))
 
     primary_query = f"list:{group_email}"
     fallback_query = f"(to:{group_email} OR from:{group_email})"
+
+    if last_fetch_epoch > 0:
+        primary_query += f" after:{last_fetch_epoch}"
+        fallback_query += f" after:{last_fetch_epoch}"
 
     messages = search_messages(service, primary_query, max_results)
     used_query = primary_query
@@ -133,16 +178,20 @@ def fetch_group_emails(service, group_email: str | None = None, max_results: int
         messages = search_messages(service, fallback_query, max_results)
         used_query = fallback_query
 
-    if not messages:
-        raise ValueError(f"No emails found for group {group_email}")
+    existing_emails = load_existing_emails()
+    existing_ids = {email.get("message_id") for email in existing_emails}
 
-    emails = []
+    new_emails = []
     grouped_threads = {}
 
     for msg in messages:
+        msg_id = msg["id"]
+        if msg_id in existing_ids:
+            continue
+
         msg_data = service.users().messages().get(
             userId="me",
-            id=msg["id"],
+            id=msg_id,
             format="full",
         ).execute()
 
@@ -179,7 +228,7 @@ def fetch_group_emails(service, group_email: str | None = None, max_results: int
             "body": body,
         }
 
-        emails.append(email_item)
+        new_emails.append(email_item)
 
         if thread_id not in grouped_threads:
             grouped_threads[thread_id] = {
@@ -191,24 +240,17 @@ def fetch_group_emails(service, group_email: str | None = None, max_results: int
 
         grouped_threads[thread_id]["messages"].append(email_item)
 
-    output_dir = os.path.join("data", "raw")
-    os.makedirs(output_dir, exist_ok=True)
+    merged_emails = existing_emails + new_emails
+    save_emails(merged_emails)
+    save_threads(list(grouped_threads.values()))
 
-    emails_path = os.path.join(output_dir, "gmail_messages.json")
-    threads_path = os.path.join(output_dir, "gmail_threads.json")
+    state["gmail"]["last_fetch_epoch"] = int(datetime.now(timezone.utc).timestamp())
+    save_sync_state(state)
 
-    with open(emails_path, "w", encoding="utf-8") as f:
-        json.dump(emails, f, indent=4, ensure_ascii=False)
-
-    with open(threads_path, "w", encoding="utf-8") as f:
-        json.dump(list(grouped_threads.values()), f, indent=4, ensure_ascii=False)
-
-    print(f"Saved {len(emails)} Gmail messages to {emails_path}")
-    print(f"Saved {len(grouped_threads)} Gmail threads to {threads_path}")
-
-    return list(grouped_threads.values())
+    print(f"Gmail incremental sync complete. New emails: {len(new_emails)}")
+    return new_emails
 
 
 if __name__ == "__main__":
     service = authenticate_gmail()
-    fetch_group_emails(service)
+    fetch_group_emails_incremental(service)

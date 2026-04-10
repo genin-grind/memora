@@ -1,4 +1,5 @@
 import json
+from html import escape
 from pathlib import Path
 
 import streamlit as st
@@ -10,23 +11,10 @@ st.set_page_config(
 )
 
 from utils.auth import require_auth
+from utils.sidebar import render_common_sidebar
 
 require_auth()
-
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### 👤 Profile")
-    st.write(f"**{st.session_state.user_name}**")
-    st.caption(st.session_state.user_email)
-    st.caption(f"Role: {st.session_state.user_role}")
-
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_email = ""
-        st.session_state.user_name = ""
-        st.session_state.org_name = ""
-        st.session_state.user_role = "Member"
-        st.switch_page("pages/1_Login.py")
+render_common_sidebar()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
@@ -51,30 +39,8 @@ def load_text_file(path: Path) -> str:
         return ""
 
 
-slack_messages = load_json_file(RAW_DIR / "slack_messages.json", [])
-gmail_messages = load_json_file(RAW_DIR / "gmail_messages.json", [])
-gmail_threads = load_json_file(RAW_DIR / "gmail_threads.json", [])
-slack_users = load_json_file(RAW_DIR / "slack_users.json", {})
-meeting_notes = load_text_file(RAW_DIR / "meeting_notes.txt")
-final_document = load_text_file(RAW_DIR / "final_document.txt")
-
-
-page_size = 5
-
-if "page_slack" not in st.session_state:
-    st.session_state.page_slack = 1
-if "page_gmail" not in st.session_state:
-    st.session_state.page_gmail = 1
-if "page_meeting" not in st.session_state:
-    st.session_state.page_meeting = 1
-if "page_final" not in st.session_state:
-    st.session_state.page_final = 1
-
-
-def get_user_name(user_id: str) -> str:
-    if not user_id:
-        return "Unknown"
-    return slack_users.get(user_id, user_id)
+def safe_text(text: str) -> str:
+    return escape(text or "")
 
 
 def short_text(text: str, limit: int = 180) -> str:
@@ -82,6 +48,37 @@ def short_text(text: str, limit: int = 180) -> str:
     if len(text) <= limit:
         return text
     return text[:limit].rstrip() + "..."
+
+
+def clamp_page(key: str, total_items: int, page_size: int):
+    total_pages = max(1, (total_items + page_size - 1) // page_size)
+    if key not in st.session_state:
+        st.session_state[key] = 1
+    if st.session_state[key] > total_pages:
+        st.session_state[key] = total_pages
+    if st.session_state[key] < 1:
+        st.session_state[key] = 1
+    return total_pages
+
+
+slack_messages = load_json_file(RAW_DIR / "slack_messages.json", [])
+gmail_messages = load_json_file(RAW_DIR / "gmail_messages.json", [])
+gmail_threads = load_json_file(RAW_DIR / "gmail_threads.json", [])
+slack_users = load_json_file(RAW_DIR / "slack_users.json", {})
+meeting_notes = load_text_file(RAW_DIR / "meeting_notes.txt")
+final_document = load_text_file(RAW_DIR / "final_document.txt")
+
+page_size = 5
+
+for key in ["page_slack", "page_gmail", "page_meeting", "page_final"]:
+    if key not in st.session_state:
+        st.session_state[key] = 1
+
+
+def get_user_name(user_id: str) -> str:
+    if not user_id:
+        return "Unknown"
+    return slack_users.get(user_id, user_id)
 
 
 st.markdown(
@@ -136,14 +133,24 @@ st.markdown(
             background: #111827;
             border: 1px solid rgba(255,255,255,0.06);
             border-radius: 20px;
-            padding: 18px;
+            padding: 20px 18px 18px 18px;
+            margin-bottom: 14px;
         }
 
         .panel-title {
             color: white;
             font-size: 1.05rem;
             font-weight: 700;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        div[data-testid="stTabs"] {
+            margin-top: 0.2rem;
+        }
+
+        div[data-testid="column"] .panel {
+            height: 100%;
         }
 
         .record-card {
@@ -170,6 +177,8 @@ st.markdown(
             color: #e5e7eb;
             font-size: 0.94rem;
             line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
 
         .badge {
@@ -204,6 +213,12 @@ st.markdown(
             background: rgba(16,185,129,0.14);
             color: #86efac;
             border: 1px solid rgba(16,185,129,0.28);
+        }
+
+        .muted-note {
+            color: #94a3b8;
+            font-size: 0.84rem;
+            margin-top: 6px;
         }
     </style>
     """,
@@ -282,17 +297,18 @@ with left:
         ["All", "Slack", "Gmail", "Meeting Notes", "Final Document"],
     )
 
-    search_text = st.text_input("Search", placeholder="Search text, subject, sender, user...")
+    search_text = st.text_input("Search", placeholder="Search text, subject, sender, user...").strip()
 
     show_full_text = st.toggle("Show full text in cards", value=False)
 
     st.markdown("---")
     st.markdown("**Pagination**")
-    st.markdown("Each source displays 10 results per page.")
+    st.markdown(f"Each source displays {page_size} results per page.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right:
+    st.markdown("<div style='height: 6px;'></div>", unsafe_allow_html=True)
     tabs = st.tabs(["Slack", "Gmail", "Meeting Notes", "Final Document"])
 
     with tabs[0]:
@@ -314,15 +330,20 @@ with right:
                 continue
             filtered_slack.append(msg)
 
+        # Sort by timestamp (newest first)
+        filtered_slack.sort(key=lambda x: float(x.get("ts", "0")), reverse=True)
+
+        st.caption(f"Showing {len(filtered_slack)} matching Slack records")
+
         if source_type not in ["All", "Slack"]:
-            st.info("Select Slack in the filter panel to view Slack records here.")
+            st.info("Slack tab is available, but the current source filter is excluding it.")
         elif not filtered_slack:
             st.info("No Slack messages found.")
         else:
-            total_pages = (len(filtered_slack) + page_size - 1) // page_size
+            total_pages = clamp_page("page_slack", len(filtered_slack), page_size)
             start = (st.session_state.page_slack - 1) * page_size
             end = start + page_size
-            
+
             for msg in filtered_slack[start:end]:
                 user_name = msg.get("user_name") or get_user_name(msg.get("user", ""))
                 text = msg.get("text", "")
@@ -332,17 +353,21 @@ with right:
                     f"""
                     <div class="record-card">
                         <div class="record-title">
-                            <span class="badge badge-slack">Slack</span> {user_name}
+                            <span class="badge badge-slack">Slack</span> {safe_text(user_name)}
                         </div>
                         <div class="record-meta">
-                            Channel: {msg.get("channel", "N/A")} | Timestamp: {msg.get("ts", "N/A")}
+                            Channel: {safe_text(str(msg.get("channel", "N/A")))} | Timestamp: {safe_text(str(msg.get("ts", "N/A")))}
                         </div>
-                        <div class="record-text">{preview}</div>
+                        <div class="record-text">{safe_text(preview)}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            
+
+                if not show_full_text and len(text) > len(preview):
+                    with st.expander("View full Slack message"):
+                        st.write(text)
+
             st.markdown("---")
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
@@ -350,7 +375,10 @@ with right:
                     st.session_state.page_slack -= 1
                     st.rerun()
             with col2:
-                st.markdown(f"<div style='text-align:center; color: #9aa4b2;'>Page {st.session_state.page_slack} of {total_pages}</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='text-align:center; color: #9aa4b2;'>Page {st.session_state.page_slack} of {total_pages}</div>",
+                    unsafe_allow_html=True,
+                )
             with col3:
                 if st.button("Next →", key="slack_next", disabled=st.session_state.page_slack == total_pages):
                     st.session_state.page_slack += 1
@@ -377,15 +405,20 @@ with right:
                 continue
             filtered_gmail.append(msg)
 
+        # Sort by date (newest first)
+        filtered_gmail.sort(key=lambda x: str(x.get("date", "")), reverse=True)
+
+        st.caption(f"Showing {len(filtered_gmail)} matching Gmail records")
+
         if source_type not in ["All", "Gmail"]:
-            st.info("Select Gmail in the filter panel to view Gmail records here.")
+            st.info("Gmail tab is available, but the current source filter is excluding it.")
         elif not filtered_gmail:
             st.info("No Gmail messages found.")
         else:
-            total_pages = (len(filtered_gmail) + page_size - 1) // page_size
+            total_pages = clamp_page("page_gmail", len(filtered_gmail), page_size)
             start = (st.session_state.page_gmail - 1) * page_size
             end = start + page_size
-            
+
             for msg in filtered_gmail[start:end]:
                 body = msg.get("body", "")
                 preview = body if show_full_text else short_text(body)
@@ -394,17 +427,21 @@ with right:
                     f"""
                     <div class="record-card">
                         <div class="record-title">
-                            <span class="badge badge-gmail">Gmail</span> {msg.get("subject", "No subject")}
+                            <span class="badge badge-gmail">Gmail</span> {safe_text(msg.get("subject", "No subject"))}
                         </div>
                         <div class="record-meta">
-                            From: {msg.get("from", "N/A")} | Date: {msg.get("date", "N/A")}
+                            From: {safe_text(msg.get("from", "N/A"))} | Date: {safe_text(msg.get("date", "N/A"))}
                         </div>
-                        <div class="record-text">{preview}</div>
+                        <div class="record-text">{safe_text(preview)}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            
+
+                if not show_full_text and len(body) > len(preview):
+                    with st.expander("View full email body"):
+                        st.write(body)
+
             st.markdown("---")
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
@@ -412,7 +449,10 @@ with right:
                     st.session_state.page_gmail -= 1
                     st.rerun()
             with col2:
-                st.markdown(f"<div style='text-align:center; color: #9aa4b2;'>Page {st.session_state.page_gmail} of {total_pages}</div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='text-align:center; color: #9aa4b2;'>Page {st.session_state.page_gmail} of {total_pages}</div>",
+                    unsafe_allow_html=True,
+                )
             with col3:
                 if st.button("Next →", key="gmail_next", disabled=st.session_state.page_gmail == total_pages):
                     st.session_state.page_gmail += 1
@@ -425,7 +465,7 @@ with right:
         st.markdown('<div class="panel-title">Meeting Notes</div>', unsafe_allow_html=True)
 
         if source_type not in ["All", "Meeting Notes"]:
-            st.info("Select Meeting Notes in the filter panel to view this section.")
+            st.info("Meeting Notes tab is available, but the current source filter is excluding it.")
         elif not meeting_notes:
             st.info("No meeting notes file found.")
         else:
@@ -441,11 +481,14 @@ with right:
                             <span class="badge badge-meeting">Meeting Notes</span> meeting_notes.txt
                         </div>
                         <div class="record-meta">Text artifact</div>
-                        <div class="record-text">{preview}</div>
+                        <div class="record-text">{safe_text(preview)}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
+                if not show_full_text and len(content) > len(preview):
+                    with st.expander("View full meeting notes"):
+                        st.write(content)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -454,7 +497,7 @@ with right:
         st.markdown('<div class="panel-title">Final Decision Document</div>', unsafe_allow_html=True)
 
         if source_type not in ["All", "Final Document"]:
-            st.info("Select Final Document in the filter panel to view this section.")
+            st.info("Final Document tab is available, but the current source filter is excluding it.")
         elif not final_document:
             st.info("No final document file found.")
         else:
@@ -470,10 +513,13 @@ with right:
                             <span class="badge badge-final">Final Document</span> final_document.txt
                         </div>
                         <div class="record-meta">Text artifact</div>
-                        <div class="record-text">{preview}</div>
+                        <div class="record-text">{safe_text(preview)}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
+                if not show_full_text and len(content) > len(preview):
+                    with st.expander("View full final document"):
+                        st.write(content)
 
         st.markdown("</div>", unsafe_allow_html=True)
