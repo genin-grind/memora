@@ -2,12 +2,16 @@ import os
 import re
 from pathlib import Path
 from typing import List, Dict, Any
-
+from utils.graph_builder import build_influence_graph
 import chromadb
 import streamlit as st
 from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 from dotenv import load_dotenv
 from google import genai
+import json
+import html
+import streamlit.components.v1 as components
+from graphviz import Digraph
 
 st.set_page_config(
     page_title="Memora | Organizational Reasoning Engine",
@@ -488,6 +492,92 @@ def get_human_source_label(doc_id: str, meta: Dict[str, Any]) -> str:
     return doc_id
 
 
+def render_graphviz_graph(graph_data: Dict[str, Any]):
+    dot = Digraph(comment="Memora Decision Graph")
+    dot.attr(rankdir="LR", bgcolor="#0b1020", pad="0.4", nodesep="0.55", ranksep="1.0")
+    dot.attr("graph", fontname="Inter", splines="spline")
+    dot.attr("node", fontname="Inter", shape="box", style="rounded,filled", color="#334155", penwidth="1.4")
+    dot.attr("edge", fontname="Inter", color="#94a3b8", arrowsize="0.8", penwidth="1.3")
+
+    type_styles = {
+        "person": {
+            "fillcolor": "#2b1748",
+            "fontcolor": "#f5f3ff",
+            "color": "#8b5cf6",
+        },
+        "source": {
+            "fillcolor": "#0f2a44",
+            "fontcolor": "#e0f2fe",
+            "color": "#38bdf8",
+        },
+        "reason": {
+            "fillcolor": "#3b2506",
+            "fontcolor": "#fef3c7",
+            "color": "#f59e0b",
+        },
+        "decision": {
+            "fillcolor": "#0d2f1f",
+            "fontcolor": "#dcfce7",
+            "color": "#22c55e",
+        },
+    }
+
+    edge_colors = {
+        "said": "#a78bfa",
+        "sent": "#fb7185",
+        "mentions": "#fbbf24",
+        "supports": "#38bdf8",
+        "influences": "#7dd3fc",
+        "finalizes": "#60a5fa",
+        "confirms": "#4ade80",
+        "shapes": "#f59e0b",
+    }
+
+    def shorten(text: str, max_len: int = 28) -> str:
+        text = str(text or "").strip()
+        return text if len(text) <= max_len else text[:max_len - 3] + "..."
+
+    def format_node_label(node: Dict[str, Any]) -> str:
+        label = shorten(node.get("label", ""), 30)
+        node_type = node.get("type", "").title()
+        return f"{label}\\n{node_type}"
+
+    # Add nodes
+    for node in graph_data["nodes"]:
+        node_type = node.get("type", "source")
+        style = type_styles.get(node_type, type_styles["source"])
+
+        width = "2.2"
+        if node_type == "decision":
+            width = "2.6"
+
+        dot.node(
+            node["id"],
+            format_node_label(node),
+            fillcolor=style["fillcolor"],
+            fontcolor=style["fontcolor"],
+            color=style["color"],
+            width=width,
+            height="0.8",
+            margin="0.18,0.12",
+        )
+
+    # Add edges
+    for edge in graph_data["edges"]:
+        label = edge.get("label", "")
+        dot.edge(
+            edge["source"],
+            edge["target"],
+            label=label,
+            color=edge_colors.get(label, "#94a3b8"),
+            fontcolor="#cbd5e1",
+        )
+
+    st.markdown("### Decision Graph")
+    st.caption("Interactive-free professional graph built directly in Streamlit.")
+    st.graphviz_chart(dot,width="stretch")
+
+
 if "last_query" not in st.session_state:
     st.session_state.last_query = ""
 
@@ -544,7 +634,7 @@ with left_top:
     if selected_example and not user_query:
         user_query = selected_example
 
-    analyze = st.button("Analyze Decision", use_container_width=True)
+    analyze = st.button("Analyze Decision", width="stretch")
     st.markdown("</div>", unsafe_allow_html=True)
 
 with right_top:
@@ -647,7 +737,7 @@ Evidence:
 """
 
             response = genai_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-flash-lite",
                 contents=prompt,
             )
 
@@ -699,9 +789,29 @@ if st.session_state.last_answer:
             <div class="metric-value">{infer_confidence(metas)}</div>
         </div>
         """, unsafe_allow_html=True)
+    
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["Decision Answer", "Evidence Cards", "Reasoning Timeline", "Raw Trace"]
+    st.markdown(
+       """
+      <div style="
+        margin-top:1rem;
+        margin-bottom:1rem;
+        padding:1rem 1.2rem;
+        border-radius:16px;
+        background:rgba(34,197,94,0.12);
+        border:1px solid rgba(34,197,94,0.28);
+        color:white;
+        font-weight:600;
+      ">
+        ✅ Analysis ready. Explore the <b>Decision Graph</b> tab to see who said what and how this decision was formed.
+        </div>
+        """,
+       unsafe_allow_html=True,
+    )
+
+
+    tab1, tab2, tab3, tab4,tab5= st.tabs(
+        ["🧠 Final Answer", "📁 Evidence", "🕒 Reasoning Flow", "🕸️ Decision Graph", "🧾 Raw Trace"]
     )
 
     with tab1:
@@ -725,7 +835,7 @@ if st.session_state.last_answer:
             for idx, (doc_id, meta) in enumerate(zip(ids, metas)):
                 label = get_human_source_label(doc_id, meta)
                 with cols[idx % num_cols]:
-                    if st.button(label, key=f"source_btn_{doc_id}", use_container_width=True):
+                    if st.button(label, key=f"source_btn_{doc_id}", width="stretch"):
                         st.session_state.selected_source_id = doc_id
 
         if st.session_state.selected_source_id:
@@ -812,6 +922,16 @@ if st.session_state.last_answer:
             )
 
     with tab4:
+       graph_data = build_influence_graph(
+        ids[:6],
+        metas[:6],
+        docs[:6],
+        st.session_state.last_query,
+        answer_text,
+      )
+       render_graphviz_graph(graph_data)
+
+    with tab5:
         st.markdown("### Raw Retrieval Trace")
         st.caption("Useful for debugging, demo explanations, and proof of provenance.")
         for i, (doc_id, meta, doc) in enumerate(zip(ids, metas, docs), start=1):
