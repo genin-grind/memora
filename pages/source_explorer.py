@@ -2,14 +2,31 @@ import json
 from pathlib import Path
 
 import streamlit as st
-from utils.auth import require_auth
 
-require_auth()
 st.set_page_config(
     page_title="Source Explorer",
     page_icon="🗂️",
     layout="wide",
 )
+
+from utils.auth import require_auth
+
+require_auth()
+
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 👤 Profile")
+    st.write(f"**{st.session_state.user_name}**")
+    st.caption(st.session_state.user_email)
+    st.caption(f"Role: {st.session_state.user_role}")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.user_name = ""
+        st.session_state.org_name = ""
+        st.session_state.user_role = "Member"
+        st.switch_page("pages/1_Login.py")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
@@ -40,6 +57,18 @@ gmail_threads = load_json_file(RAW_DIR / "gmail_threads.json", [])
 slack_users = load_json_file(RAW_DIR / "slack_users.json", {})
 meeting_notes = load_text_file(RAW_DIR / "meeting_notes.txt")
 final_document = load_text_file(RAW_DIR / "final_document.txt")
+
+
+page_size = 5
+
+if "page_slack" not in st.session_state:
+    st.session_state.page_slack = 1
+if "page_gmail" not in st.session_state:
+    st.session_state.page_gmail = 1
+if "page_meeting" not in st.session_state:
+    st.session_state.page_meeting = 1
+if "page_final" not in st.session_state:
+    st.session_state.page_final = 1
 
 
 def get_user_name(user_id: str) -> str:
@@ -255,9 +284,11 @@ with left:
 
     search_text = st.text_input("Search", placeholder="Search text, subject, sender, user...")
 
-    max_items = st.slider("Max results", 5, 50, 12)
-
     show_full_text = st.toggle("Show full text in cards", value=False)
+
+    st.markdown("---")
+    st.markdown("**Pagination**")
+    st.markdown("Each source displays 10 results per page.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -288,7 +319,11 @@ with right:
         elif not filtered_slack:
             st.info("No Slack messages found.")
         else:
-            for msg in filtered_slack[:max_items]:
+            total_pages = (len(filtered_slack) + page_size - 1) // page_size
+            start = (st.session_state.page_slack - 1) * page_size
+            end = start + page_size
+            
+            for msg in filtered_slack[start:end]:
                 user_name = msg.get("user_name") or get_user_name(msg.get("user", ""))
                 text = msg.get("text", "")
                 preview = text if show_full_text else short_text(text)
@@ -307,6 +342,19 @@ with right:
                     """,
                     unsafe_allow_html=True,
                 )
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col1:
+                if st.button("← Previous", key="slack_prev", disabled=st.session_state.page_slack == 1):
+                    st.session_state.page_slack -= 1
+                    st.rerun()
+            with col2:
+                st.markdown(f"<div style='text-align:center; color: #9aa4b2;'>Page {st.session_state.page_slack} of {total_pages}</div>", unsafe_allow_html=True)
+            with col3:
+                if st.button("Next →", key="slack_next", disabled=st.session_state.page_slack == total_pages):
+                    st.session_state.page_slack += 1
+                    st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -334,7 +382,11 @@ with right:
         elif not filtered_gmail:
             st.info("No Gmail messages found.")
         else:
-            for msg in filtered_gmail[:max_items]:
+            total_pages = (len(filtered_gmail) + page_size - 1) // page_size
+            start = (st.session_state.page_gmail - 1) * page_size
+            end = start + page_size
+            
+            for msg in filtered_gmail[start:end]:
                 body = msg.get("body", "")
                 preview = body if show_full_text else short_text(body)
 
@@ -352,6 +404,19 @@ with right:
                     """,
                     unsafe_allow_html=True,
                 )
+            
+            st.markdown("---")
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col1:
+                if st.button("← Previous", key="gmail_prev", disabled=st.session_state.page_gmail == 1):
+                    st.session_state.page_gmail -= 1
+                    st.rerun()
+            with col2:
+                st.markdown(f"<div style='text-align:center; color: #9aa4b2;'>Page {st.session_state.page_gmail} of {total_pages}</div>", unsafe_allow_html=True)
+            with col3:
+                if st.button("Next →", key="gmail_next", disabled=st.session_state.page_gmail == total_pages):
+                    st.session_state.page_gmail += 1
+                    st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
 

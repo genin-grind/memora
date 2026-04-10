@@ -3,14 +3,31 @@ from pathlib import Path
 from collections import Counter
 
 import streamlit as st
-from utils.auth import require_auth
 
-require_auth()
 st.set_page_config(
     page_title="My Organization",
     page_icon="🏢",
     layout="wide",
 )
+
+from utils.auth import require_auth
+
+require_auth()
+
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 👤 Profile")
+    st.write(f"**{st.session_state.user_name}**")
+    st.caption(st.session_state.user_email)
+    st.caption(f"Role: {st.session_state.user_role}")
+
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.session_state.user_email = ""
+        st.session_state.user_name = ""
+        st.session_state.org_name = ""
+        st.session_state.user_role = "Member"
+        st.switch_page("pages/1_Login.py")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
@@ -71,8 +88,8 @@ def unique_gmail_senders():
 slack_people = unique_slack_people()
 gmail_senders = unique_gmail_senders()
 
-verified_user_name = "Kalyani Ugale"
-verified_user_email = "kalyaniugale24@gmail.com"
+verified_user_name = st.session_state.user_name
+verified_user_email = st.session_state.user_email
 
 connected_sources = [
     ("Slack connected", len(slack_messages) > 0),
