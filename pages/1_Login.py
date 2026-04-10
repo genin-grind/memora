@@ -4,6 +4,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from utils.sidebar import render_common_sidebar
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 RAW_DIR = BASE_DIR / "data" / "raw"
 DATA_DIR = BASE_DIR / "data"
@@ -132,6 +134,10 @@ initialize_session()
 org_config = load_org_config()
 known_org_emails = collect_known_org_emails()
 known_people = collect_known_people()
+
+# Only show sidebar if user is already logged in
+if st.session_state.get("logged_in"):
+    render_common_sidebar()
 
 st.markdown("""
 <style>

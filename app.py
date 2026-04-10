@@ -1,5 +1,6 @@
 import os
 import re
+import time
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -8,6 +9,9 @@ import streamlit as st
 from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 from dotenv import load_dotenv
 from google import genai
+
+from ingest import run_incremental_ingestion
+from utils.sidebar import render_common_sidebar
 
 st.set_page_config(
     page_title="Memora | Organizational Reasoning Engine",
@@ -20,20 +24,8 @@ from utils.auth import require_auth
 
 require_auth()
 
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("### 👤 Profile")
-    st.write(f"**{st.session_state.user_name}**")
-    st.caption(st.session_state.user_email)
-    st.caption(f"Role: {st.session_state.user_role}")
-
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.session_state.user_email = ""
-        st.session_state.user_name = ""
-        st.session_state.org_name = ""
-        st.session_state.user_role = "Member"
-        st.switch_page("pages/1_Login.py")
+# Render the common sidebar
+render_common_sidebar()
 
 BASE_DIR = Path(__file__).resolve().parent
 CHROMA_DIR = BASE_DIR / "chroma_data"
@@ -69,6 +61,15 @@ collection = chroma_client.get_or_create_collection(
     name=COLLECTION_NAME,
     embedding_function=embedding_function,
 )
+
+# Auto-sync every N seconds
+current_time = time.time()
+if current_time - st.session_state.last_sync_time > st.session_state.auto_sync_interval:
+    try:
+        sync_result = run_incremental_ingestion(include_static_docs=False)
+        st.session_state.last_sync_time = current_time
+    except Exception as e:
+        pass  # Silent fail for auto-sync
 
 st.markdown("""
 <style>
@@ -647,7 +648,7 @@ Evidence:
 """
 
             response = genai_client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-flash-lite",
                 contents=prompt,
             )
 

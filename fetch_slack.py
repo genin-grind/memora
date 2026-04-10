@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from dotenv import load_dotenv
@@ -9,11 +10,50 @@ load_dotenv()
 SLACK_BOT_TOKEN = os.getenv("SLACK_TOKEN")
 DEFAULT_CHANNEL_NAME = os.getenv("SLACK_CHANNEL", "all-memora-labs")
 
+BASE_DIR = Path(__file__).resolve().parent
+RAW_DIR = BASE_DIR / "data" / "raw"
+SYNC_STATE_PATH = BASE_DIR / "data" / "sync_state.json"
+
 
 def _get_client() -> WebClient:
     if not SLACK_BOT_TOKEN:
         raise ValueError("Missing SLACK_TOKEN in .env")
     return WebClient(token=SLACK_BOT_TOKEN)
+
+
+def load_sync_state():
+    if not SYNC_STATE_PATH.exists():
+        return {"slack": {"last_ts": "0"}, "gmail": {"last_fetch_epoch": 0}}
+    with open(SYNC_STATE_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_sync_state(state):
+    SYNC_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(SYNC_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(state, f, indent=4)
+
+
+def load_existing_messages():
+    path = RAW_DIR / "slack_messages.json"
+    if not path.exists():
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_messages(messages):
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    path = RAW_DIR / "slack_messages.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(messages, f, indent=4, ensure_ascii=False)
+
+
+def save_users(users_map):
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+    path = RAW_DIR / "slack_users.json"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(users_map, f, indent=4, ensure_ascii=False)
 
 
 def get_all_channels(client: WebClient) -> list:
@@ -35,8 +75,7 @@ def get_all_channels(client: WebClient) -> list:
 
 
 def get_channel_id(client: WebClient, channel_name: str) -> str | None:
-    channels = get_all_channels(client)
-    for channel in channels:
+    for channel in get_all_channels(client):
         if channel.get("name") == channel_name:
             return channel.get("id")
     return None
@@ -48,17 +87,13 @@ def fetch_users_map(client: WebClient) -> dict:
 
     while True:
         response = client.users_list(limit=200, cursor=cursor)
-        members = response.get("members", [])
-
-        for member in members:
+        for member in response.get("members", []):
             user_id = member.get("id")
             profile = member.get("profile", {}) or {}
             display_name = profile.get("display_name")
             real_name = profile.get("real_name")
             name = member.get("name")
-
-            best_name = display_name or real_name or name or user_id
-            users_map[user_id] = best_name
+            users_map[user_id] = display_name or real_name or name or user_id
 
         cursor = response.get("response_metadata", {}).get("next_cursor")
         if not cursor:
@@ -67,7 +102,7 @@ def fetch_users_map(client: WebClient) -> dict:
     return users_map
 
 
-def fetch_channel_messages(channel_name: str | None = None, limit: int = 100) -> list:
+def fetch_channel_messages_incremental(channel_name: str | None = None, limit: int = 200) -> list:
     client = _get_client()
     channel_name = channel_name or DEFAULT_CHANNEL_NAME
 
@@ -76,19 +111,29 @@ def fetch_channel_messages(channel_name: str | None = None, limit: int = 100) ->
         if not channel_id:
             raise ValueError(f"Channel '{channel_name}' not found")
 
+        state = load_sync_state()
+        last_ts = state.get("slack", {}).get("last_ts", "0")
+
         users_map = fetch_users_map(client)
+        existing_messages = load_existing_messages()
+        existing_ts = {msg.get("ts") for msg in existing_messages}
 
         response = client.conversations_history(
             channel=channel_id,
             limit=limit,
+            oldest=last_ts,
+            inclusive=False,
         )
 
         messages = response.get("messages", [])
-        structured_messages = []
+        new_messages = []
 
         for msg in messages:
-            user_id = msg.get("user", "unknown")
+            ts = msg.get("ts", "")
+            if not ts or ts in existing_ts:
+                continue
 
+            user_id = msg.get("user", "unknown")
             item = {
                 "source": "slack",
                 "channel": channel_name,
@@ -96,31 +141,29 @@ def fetch_channel_messages(channel_name: str | None = None, limit: int = 100) ->
                 "user": user_id,
                 "user_name": users_map.get(user_id, user_id),
                 "text": msg.get("text", ""),
-                "ts": msg.get("ts", ""),
-                "thread_ts": msg.get("thread_ts", msg.get("ts", "")),
+                "ts": ts,
+                "thread_ts": msg.get("thread_ts", ts),
                 "type": msg.get("type", ""),
             }
-            structured_messages.append(item)
+            new_messages.append(item)
 
-        output_dir = os.path.join("data", "raw")
-        os.makedirs(output_dir, exist_ok=True)
+        merged_messages = existing_messages + new_messages
+        merged_messages.sort(key=lambda x: float(x.get("ts", "0")))
 
-        messages_path = os.path.join(output_dir, "slack_messages.json")
-        users_path = os.path.join(output_dir, "slack_users.json")
+        save_messages(merged_messages)
+        save_users(users_map)
 
-        with open(messages_path, "w", encoding="utf-8") as f:
-            json.dump(structured_messages, f, indent=4, ensure_ascii=False)
+        if merged_messages:
+            newest_ts = max((msg.get("ts", "0") for msg in merged_messages), key=float)
+            state["slack"]["last_ts"] = newest_ts
+            save_sync_state(state)
 
-        with open(users_path, "w", encoding="utf-8") as f:
-            json.dump(users_map, f, indent=4, ensure_ascii=False)
-
-        print(f"Saved {len(structured_messages)} Slack messages to {messages_path}")
-        print(f"Saved {len(users_map)} Slack users to {users_path}")
-        return structured_messages
+        print(f"Slack incremental sync complete. New messages: {len(new_messages)}")
+        return new_messages
 
     except SlackApiError as e:
         raise RuntimeError(f"Slack API Error: {e.response['error']}") from e
 
 
 if __name__ == "__main__":
-    fetch_channel_messages()
+    fetch_channel_messages_incremental()
