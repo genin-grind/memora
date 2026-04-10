@@ -322,6 +322,16 @@ def get_human_source_label(doc_id: str, meta: dict[str, Any]) -> str:
     return doc_id
 
 
+def clean_file_name(file_name: str, fallback: str = "unknown_file.txt") -> str:
+    if not file_name:
+        return fallback
+    # normalize slashes and keep only the last segment
+    normalized = str(file_name).replace("\\", "/").strip()
+    base = os.path.basename(normalized)
+    # remove numeric prefixes like "1775844853_"
+    base = re.sub(r"^\d+_", "", base)
+    return base or fallback
+
 def get_display_meta(source: str, meta: dict[str, Any]) -> str:
     source = (source or "").lower()
 
@@ -331,9 +341,11 @@ def get_display_meta(source: str, meta: dict[str, Any]) -> str:
     if source == "gmail":
         return f"From: {meta.get('from', 'N/A')} | Subject: {meta.get('subject', 'N/A')} | Date: {meta.get('date', 'N/A')}"
     if source == "meeting":
-        return f"File: {meta.get('file_name', 'meeting_notes.txt')} | Chunk: {meta.get('chunk_index', 'N/A')}"
+        file_name = clean_file_name(meta.get("file_name"), fallback="meeting_notes.txt")
+        return f"File: {file_name} | Chunk: {meta.get('chunk_index', 'N/A')}"
     if source == "final_document":
-        return f"File: {meta.get('file_name', 'final_document.txt')} | Chunk: {meta.get('chunk_index', 'N/A')}"
+        file_name = clean_file_name(meta.get("file_name"), fallback="final_document.txt")
+        return f"File: {file_name} | Chunk: {meta.get('chunk_index', 'N/A')}"
     return str(meta)
 
 

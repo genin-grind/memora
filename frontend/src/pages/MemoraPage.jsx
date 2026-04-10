@@ -333,6 +333,7 @@ export default function MemoraPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("answer");
   const [selectedEvidenceId, setSelectedEvidenceId] = useState(null);
+  const [answerSourceOpen, setAnswerSourceOpen] = useState(false);
 
   const selectedEvidence = useMemo(() => {
     if (!result?.evidence?.length) return null;
@@ -359,6 +360,7 @@ export default function MemoraPage() {
       const response = await queryMemora(question);
       setResult(response);
       setSelectedEvidenceId(response.evidence?.[0]?.id || null);
+      setAnswerSourceOpen(false);
       setActiveTab("answer");
     } catch (err) {
       setError(err.message || "Unable to analyze the question right now.");
@@ -434,6 +436,39 @@ export default function MemoraPage() {
 
         {result ? (
           <>
+            {answerSourceOpen && selectedEvidence ? (
+              <div className="source-focus-overlay" onClick={() => setAnswerSourceOpen(false)}>
+                <div
+                  className="source-focus-modal"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="source-focus-close"
+                    onClick={() => setAnswerSourceOpen(false)}
+                  >
+                    Close
+                  </button>
+                  <div className="source-focus-header">
+                    <p className="panel-kicker">Opened Source</p>
+                    <h3>{selectedEvidence.label}</h3>
+                    <p className="source-focus-meta">{selectedEvidence.meta_display}</p>
+                  </div>
+                  <div className="source-focus-chip-row">
+                    <span className="source-focus-chip">{selectedEvidence.source}</span>
+                    <span className="source-focus-chip">Rank #{selectedEvidence.rank}</span>
+                  </div>
+                  <div className="source-focus-summary">
+                    <p className="evidence-snippet">{selectedEvidence.snippet}</p>
+                    <p className="panel-copy">{selectedEvidence.relevance_note}</p>
+                  </div>
+                  <pre className="trace-block trace-block-text source-focus-reader">
+                    {selectedEvidence.full_text}
+                  </pre>
+                </div>
+              </div>
+            ) : null}
+
             <div className="stats-grid stats-grid-tight">
               <div className="minimal-card stat-card"><p className="stat-label">Evidence</p><h3 className="stat-value">{result.metrics.evidence_retrieved}</h3></div>
               <div className="minimal-card stat-card"><p className="stat-label">Source types</p><h3 className="stat-value">{result.metrics.source_types}</h3></div>
@@ -459,11 +494,14 @@ export default function MemoraPage() {
             </div>
 
             {activeTab === "answer" ? (
-              <div className="answer-dashboard">
+              <div className={`answer-dashboard${answerSourceOpen ? " answer-dashboard-blurred" : ""}`}>
                 <div className="answer-sections-grid">
-                  {answerSections.map((section) => (
-                    <section key={section.title} className="minimal-card answer-section-card">
-                      <p className="panel-kicker">{section.title}</p>
+                  {answerSections.map((section, index) => (
+                    <section key={section.title} className={`minimal-card answer-section-card answer-section-card-${index + 1}`}>
+                      <div className="answer-section-head">
+                        <p className="panel-kicker">{section.title}</p>
+                        <span className="answer-section-orbit" />
+                      </div>
                       <div className="answer-section-items">
                         {section.items.length ? section.items.map((item) => <p key={item}>{item}</p>) : <p>{section.title}</p>}
                       </div>
@@ -483,7 +521,10 @@ export default function MemoraPage() {
                           key={item.id}
                           type="button"
                           className={`source-pill${selectedEvidence?.id === item.id ? " source-pill-active" : ""}`}
-                          onClick={() => setSelectedEvidenceId(item.id)}
+                          onClick={() => {
+                            setSelectedEvidenceId(item.id);
+                            setAnswerSourceOpen(true);
+                          }}
                         >
                           {item.label}
                         </button>
@@ -492,11 +533,22 @@ export default function MemoraPage() {
 
                     {selectedEvidence ? (
                       <div className="opened-source-panel">
-                        <p className="opened-source-kicker">{selectedEvidence.source}</p>
-                        <h4>{selectedEvidence.label}</h4>
+                        <div>
+                          <p className="opened-source-kicker">{selectedEvidence.source}</p>
+                          <h4>{selectedEvidence.label}</h4>
+                        </div>
                         <p className="timeline-meta">{selectedEvidence.meta_display}</p>
                         <p className="evidence-snippet">{selectedEvidence.snippet}</p>
-                        <p className="panel-copy">{selectedEvidence.relevance_note}</p>
+                        <div className="opened-source-footer">
+                          <p className="panel-copy">{selectedEvidence.relevance_note}</p>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => setAnswerSourceOpen(true)}
+                          >
+                            Open in Focus View
+                          </button>
+                        </div>
                       </div>
                     ) : null}
                   </div>
