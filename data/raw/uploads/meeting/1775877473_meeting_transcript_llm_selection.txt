@@ -1,0 +1,52 @@
+Meeting Title: LLM Selection for Memora
+Participants: Sneha, Darshan, Vivek
+Date: 10 April
+
+---
+
+Vivek: Okay guys, we need to finalize the LLM today. This is critical for our system.
+
+Sneha: Yeah, I think we should go with OpenAI. It’s proven, stable, and gives very high-quality outputs.
+
+Darshan: True, but cost is a big issue. We’re going to have multiple queries, embeddings, responses… it’ll scale quickly.
+
+Vivek: That’s my concern too. We don’t want to hit API limits during the demo.
+
+Sneha: Fair, but quality matters. If answers are bad, the whole system fails.
+
+Darshan: I’ve been testing Gemini recently. It’s actually quite fast and the free tier is pretty generous.
+
+Sneha: Gemini? Is it reliable enough for reasoning tasks?
+
+Darshan: For our use case — yes. We’re doing RAG, so the model is not generating blindly. It’s grounded on retrieved data.
+
+Vivek: That’s important. Since we’re using retrieval, we don’t need the absolute best generative model.
+
+Sneha: That makes sense. But what about OpenAI vs Gemini performance?
+
+Darshan: OpenAI is slightly better in complex reasoning, but Gemini is faster and cheaper. For MVP, Gemini is a better tradeoff.
+
+Vivek: What about local models? Like using Ollama?
+
+Sneha: That would solve privacy concerns.
+
+Darshan: Yeah but setup is heavy, and performance isn’t great on our systems. Also, we don’t have time to optimize that.
+
+Vivek: Agreed. Let’s not risk it during hackathon.
+
+Sneha: Okay, so we prioritize speed + cost over marginal quality gain?
+
+Darshan: Exactly. And we can always switch later.
+
+Vivek: Sounds good. So final decision?
+
+Sneha: Yes, I’m okay with Gemini for now.
+
+Darshan: Same.
+
+Vivek: Done then.
+
+---
+
+Final Decision:
+We will use Gemini as the primary LLM for Memora due to its speed, cost efficiency, and sufficient performance for RAG-based reasoning. OpenAI and local models may be considered in future iterations.

@@ -1,6 +1,19 @@
 import re
 from typing import List, Dict, Any
 
+SPEAKER_LINE_PATTERN = re.compile(r"(?m)^\s*\*{0,2}([A-Za-z][A-Za-z0-9 _.\-]{0,40})\*{0,2}\s*:\s+")
+NON_SPEAKER_LABELS = {
+    "meeting",
+    "meeting title",
+    "participants",
+    "date",
+    "final decision",
+    "subject",
+    "from",
+    "to",
+    "cc",
+}
+
 
 def extract_reason_labels(doc: str) -> List[str]:
     text = (doc or "").lower()
@@ -79,6 +92,28 @@ def _wrap_text(text: str, line_len: int = 22, max_lines: int = 2) -> str:
         lines[-1] = lines[-1].rstrip(" .") + "..."
 
     return "\n".join(lines)
+
+
+def extract_meeting_speakers(doc: str, meta: Dict[str, Any] | None = None) -> List[str]:
+    speakers: List[str] = []
+    seen = set()
+
+    metadata_speaker = str((meta or {}).get("speaker", "")).strip()
+    if metadata_speaker:
+        normalized = metadata_speaker.lower()
+        if normalized not in NON_SPEAKER_LABELS:
+            speakers.append(metadata_speaker)
+            seen.add(normalized)
+
+    for match in SPEAKER_LINE_PATTERN.findall(str(doc or "")):
+        speaker = re.sub(r"\s+", " ", match).strip(" -*")
+        normalized = speaker.lower()
+        if not speaker or normalized in NON_SPEAKER_LABELS or normalized in seen:
+            continue
+        speakers.append(speaker)
+        seen.add(normalized)
+
+    return speakers[:4]
 
 
 def extract_decision_label(answer_text: str, question: str = "") -> str:
@@ -202,25 +237,28 @@ def build_influence_graph(
 
     for idx, (doc_id, meta, doc) in enumerate(zip(ids, metas, docs), start=1):
         source_type = meta.get("source", "unknown")
+        person_labels: List[str] = []
 
         if source_type == "slack":
-            person_label = meta.get("user_name") or meta.get("user", "Unknown")
+            speaker = meta.get("user_name") or meta.get("user", "Unknown")
+            if speaker:
+                person_labels = [speaker]
             source_label = "Slack Discussion"
 
         elif source_type == "gmail":
-            person_label = meta.get("from", "Unknown")
+            sender = meta.get("from", "Unknown")
+            if sender:
+                person_labels = [sender]
             source_label = "Email Thread"
 
         elif source_type == "meeting":
-            person_label = None
+            person_labels = extract_meeting_speakers(doc, meta)
             source_label = "Meeting Notes"
 
         elif source_type == "final_document":
-            person_label = None
             source_label = "Final Document"
 
         else:
-            person_label = None
             source_label = f"Source {idx}"
 
         source_node_id = f"source_{_safe_id(doc_id)}"
@@ -232,6 +270,7 @@ def build_influence_graph(
                 "source_type": source_type,
                 "raw_id": doc_id,
                 "meta": meta,
+                "speakers": person_labels,
                 "preview": (doc or "")[:280],
             },
         )
@@ -245,7 +284,7 @@ def build_influence_graph(
         else:
             add_edge(source_node_id, decision_id, "influences")
 
-        if person_label:
+        for person_label in person_labels:
             person_id = f"person_{_safe_id(person_label)}"
             add_node(
                 person_id,
@@ -256,10 +295,10 @@ def build_influence_graph(
                 },
             )
 
-            if source_type == "slack":
-                add_edge(person_id, source_node_id, "said")
-            elif source_type == "gmail":
+            if source_type == "gmail":
                 add_edge(person_id, source_node_id, "sent")
+            else:
+                add_edge(person_id, source_node_id, "said")
 
         reasons = extract_reason_labels(doc)
         for reason in reasons:

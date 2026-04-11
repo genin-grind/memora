@@ -1,0 +1,50 @@
+Title: Agent Framework Selection for Memora
+
+Date: 10 April
+Prepared by: Team Memora
+
+---
+
+Objective:
+To select an appropriate agent framework for implementing agentic workflows in Memora.
+
+---
+
+Background:
+Memora requires an agent-based architecture to handle multiple tasks such as data ingestion, retrieval, reasoning, and graph generation. The team evaluated two primary frameworks: CrewAI and LangGraph.
+
+---
+
+Options Considered:
+
+1. CrewAI
+- Simple and intuitive agent orchestration
+- Faster setup and integration
+- Suitable for rapid prototyping and hackathon environments
+- Limited control over complex workflows compared to LangGraph
+
+2. LangGraph
+- Highly structured workflow design
+- Better control over multi-step reasoning pipelines
+- Suitable for production-grade systems
+- Steeper learning curve and higher implementation complexity
+
+---
+
+Discussion Summary:
+The team discussed the tradeoff between development speed and workflow control. While LangGraph offers more flexibility and power, it requires more time to implement and understand. Given the hackathon timeline, rapid prototyping and ease of use were prioritized.
+
+---
+
+Final Decision:
+The team decided to use CrewAI as the primary agent framework for Memora due to its simplicity, faster development cycle, and suitability for MVP development.
+
+---
+
+Future Consideration:
+LangGraph may be explored in future iterations when the system requires more complex and controlled agent workflows.
+
+---
+
+Conclusion:
+CrewAI provides the best balance between functionality and development speed for the current scope of the Memora project.
