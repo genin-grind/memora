@@ -92,14 +92,14 @@ def extract_decision_label(answer_text: str, question: str = "") -> str:
 
     section_stoppers = {
         "why this decision was made",
-        "supporting evidence trail",
+        
         "confidence",
         "sources used",
     }
     headings = {
         "final decision",
         "why this decision was made",
-        "supporting evidence trail",
+       
         "confidence",
         "sources used",
     }
