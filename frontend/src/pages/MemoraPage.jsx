@@ -53,6 +53,33 @@ function shortenLabel(label, maxLength = 36) {
   return compact.length > maxLength ? `${compact.slice(0, maxLength - 3)}...` : compact;
 }
 
+function getConfidenceWidth(confidence) {
+  const value = String(confidence || "").toLowerCase();
+  if (value.includes("high")) return "84%";
+  if (value.includes("medium")) return "62%";
+  if (value.includes("low")) return "36%";
+  return "50%";
+}
+
+function groupEvidenceBySource(evidence) {
+  const groups = {
+    document: [],
+    gmail: [],
+    slack: [],
+    meeting: [],
+  };
+
+  evidence.forEach((item) => {
+    const key = String(item.source || "").toLowerCase();
+    if (key.includes("doc")) groups.document.push(item);
+    else if (key.includes("gmail")) groups.gmail.push(item);
+    else if (key.includes("slack")) groups.slack.push(item);
+    else groups.meeting.push(item);
+  });
+
+  return groups;
+}
+
 function getNodeFill(type) {
   if (type === "decision") return "#13261d";
   if (type === "source") return "#17283c";
@@ -346,6 +373,11 @@ export default function MemoraPage() {
     [result?.answer],
   );
 
+  const groupedEvidence = useMemo(() => {
+    if (!result?.evidence?.length) return {};
+    return groupEvidenceBySource(result.evidence);
+  }, [result]);
+
   async function handleSubmit(event) {
     event.preventDefault();
     if (!question.trim()) {
@@ -469,11 +501,22 @@ export default function MemoraPage() {
               </div>
             ) : null}
 
+
             <div className="stats-grid stats-grid-tight">
+              <p className="ai-label">🧠 AI Decision Engine Output</p>
               <div className="minimal-card stat-card"><p className="stat-label">Evidence</p><h3 className="stat-value">{result.metrics.evidence_retrieved}</h3></div>
               <div className="minimal-card stat-card"><p className="stat-label">Source types</p><h3 className="stat-value">{result.metrics.source_types}</h3></div>
               <div className="minimal-card stat-card stat-card-highlight"><p className="stat-label">Strongest source</p><h3 className="stat-value stat-value-small">{result.metrics.strongest_source}</h3></div>
-              <div className="minimal-card stat-card stat-card-highlight"><p className="stat-label">Confidence</p><h3 className="stat-value">{result.metrics.confidence}</h3></div>
+              <div className="minimal-card stat-card stat-card-highlight">
+                <p className="stat-label">Confidence</p>
+                <div className="confidence-bar">
+                  <div
+                    className="confidence-fill"
+                    style={{ width: getConfidenceWidth(result.metrics.confidence) }}
+                  />
+                </div>
+                <p className="confidence-text">{result.metrics.confidence}</p>
+              </div>
             </div>
 
             <div className="analysis-ready-banner">
@@ -497,13 +540,18 @@ export default function MemoraPage() {
               <div className={`answer-dashboard${answerSourceOpen ? " answer-dashboard-blurred" : ""}`}>
                 <div className="answer-sections-grid">
                   {answerSections.map((section, index) => (
-                    <section key={section.title} className={`minimal-card answer-section-card answer-section-card-${index + 1}`}>
+                    <section key={section.title} className={`minimal-card answer-section-card ${index === 0 ? "hero-card" : ""} answer-section-card-${index + 1}`}>
                       <div className="answer-section-head">
                         <p className="panel-kicker">{section.title}</p>
                         <span className="answer-section-orbit" />
                       </div>
                       <div className="answer-section-items">
-                        {section.items.length ? section.items.map((item) => <p key={item}>{item}</p>) : <p>{section.title}</p>}
+                        {section.items.length ? section.items.map((item) => (
+                          <div key={item} className="bullet-row">
+                            <span>✔</span>
+                            <p>{item}</p>
+                          </div>
+                        )) : <p>{section.title}</p>}
                       </div>
                     </section>
                   ))}
@@ -516,18 +564,31 @@ export default function MemoraPage() {
                       <h3>Supporting artifacts</h3>
                     </div>
                     <div className="open-source-grid">
-                      {result.evidence.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          className={`source-pill${selectedEvidence?.id === item.id ? " source-pill-active" : ""}`}
-                          onClick={() => {
-                            setSelectedEvidenceId(item.id);
-                            setAnswerSourceOpen(true);
-                          }}
-                        >
-                          {item.label}
-                        </button>
+                      {Object.entries(groupedEvidence).map(([group, items]) => (
+                        items.length ? (
+                            <div key={group} className="evidence-group">
+                              <p className="group-title">{group.toUpperCase()}</p>
+                              {items.map((item) => (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  className={`source-row${selectedEvidence?.id === item.id ? " source-row-active" : ""}`}
+                                  onClick={() => {
+                                    setSelectedEvidenceId(item.id);
+                                    setAnswerSourceOpen(true);
+                                  }}
+                                >
+                                  <div className="source-row-main">
+                                    <p className="source-row-title">{shortenLabel(item.label, 34)}</p>
+                                    <p className="source-row-meta">
+                                      {item.source} · Rank #{item.rank}
+                                    </p>
+                                  </div>
+                                  <span className="source-row-arrow">↗</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null
                       ))}
                     </div>
 
@@ -600,14 +661,33 @@ export default function MemoraPage() {
                   <p className="panel-kicker">Timeline</p>
                   <h3>Reasoning flow</h3>
                 </div>
-                <div className="timeline-ribbon">
-                  {result.timeline.map((item) => (
-                    <div key={`${item.source}-${item.title}`} className="timeline-ribbon-card">
-                      <p className="timeline-title">{item.title}</p>
-                      <p className="timeline-meta">{item.meta}</p>
-                      <p className="timeline-body">{item.text}</p>
-                    </div>
-                  ))}
+
+                <div className="timeline-flow">
+                  {result.timeline.map((item, index) => {
+                    const isLast = index === result.timeline.length - 1;
+
+                    return (
+                      <div
+                        key={`${item.source}-${item.title}-${index}`}
+                        className={`timeline-flow-card${isLast ? " timeline-flow-card-final" : ""}`}
+                      >
+                        <div className="timeline-flow-top">
+                          <div className="timeline-step-badge">Step {index + 1}</div>
+                          <div className="timeline-source-badge">{item.source}</div>
+                        </div>
+
+                        <p className="timeline-title">{item.title}</p>
+                        <p className="timeline-meta">{item.meta}</p>
+                        <p className="timeline-body">{shortenLabel(item.text, 160)}</p>
+
+                        {!isLast ? (
+                          <div className="timeline-arrow">→</div>
+                        ) : (
+                          <div className="timeline-arrow timeline-arrow-final">✓</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : null}

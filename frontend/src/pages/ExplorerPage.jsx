@@ -4,25 +4,31 @@ import { fetchExplorerWorkspace } from "../services/api";
 import { useAsyncData } from "../services/useAsyncData";
 
 const sourceTabs = [
+  { id: "all", label: "All" },
   { id: "slack", label: "Slack" },
   { id: "gmail", label: "Gmail" },
   { id: "meeting", label: "Meeting Notes" },
   { id: "final_document", label: "Final Document" },
 ];
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 function formatCount(value) {
   return new Intl.NumberFormat("en-US").format(value || 0);
 }
 
+function shortenLabel(label, maxLength = 140) {
+  const compact = String(label || "").replace(/\n/g, " ").trim();
+  return compact.length > maxLength ? `${compact.slice(0, maxLength - 3)}...` : compact;
+}
+
 export default function ExplorerPage() {
   const { data, loading, error } = useAsyncData(fetchExplorerWorkspace, null);
-  const [activeSource, setActiveSource] = useState("slack");
+  const [activeSource, setActiveSource] = useState("all");
   const [search, setSearch] = useState("");
-  const [showFullText, setShowFullText] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState(null);
   const [pageBySource, setPageBySource] = useState({
+    all: 1,
     slack: 1,
     gmail: 1,
     meeting: 1,
@@ -44,7 +50,18 @@ export default function ExplorerPage() {
     );
   }, [collections, search]);
 
-  const activeItems = filteredCollections[activeSource] || [];
+  const allItems = useMemo(() => {
+    return [
+      ...(filteredCollections.slack || []),
+      ...(filteredCollections.gmail || []),
+      ...(filteredCollections.meeting || []),
+      ...(filteredCollections.final_document || []),
+    ];
+  }, [filteredCollections]);
+
+  const activeItems = activeSource === "all"
+    ? allItems
+    : (filteredCollections[activeSource] || []);
   const activePage = pageBySource[activeSource] || 1;
   const totalPages = Math.max(1, Math.ceil(activeItems.length / PAGE_SIZE));
   const safePage = Math.min(activePage, totalPages);
@@ -95,9 +112,7 @@ export default function ExplorerPage() {
             <p className="explorer-callout-kicker">Research workspace</p>
             <h3>Scan quickly, open deeply, and stay oriented.</h3>
             <p>
-              This view is built for demo clarity: a fast record list on the left,
-              a clean source reader on the right, and one filter model across all
-              source families.
+              Browse records on the left and read the full source on the right.
             </p>
           </div>
 
@@ -117,22 +132,6 @@ export default function ExplorerPage() {
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search text, sender, subject, channel..."
             />
-
-            <div className="explorer-toggle-row">
-              <div>
-                <p className="explorer-toggle-label">Reading mode</p>
-                <p className="explorer-toggle-copy">
-                  Switch between short previews and full source text in the detail pane.
-                </p>
-              </div>
-              <button
-                type="button"
-                className={`explorer-toggle${showFullText ? " explorer-toggle-active" : ""}`}
-                onClick={() => setShowFullText((value) => !value)}
-              >
-                {showFullText ? "Full text" : "Preview"}
-              </button>
-            </div>
           </div>
         </div>
 
@@ -156,16 +155,24 @@ export default function ExplorerPage() {
         </div>
 
         <div className="tab-row">
-          {sourceTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={`tab-chip${activeSource === tab.id ? " tab-chip-active" : ""}`}
-              onClick={() => setActiveSource(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {sourceTabs.map((tab) => {
+            const count =
+              tab.id === "all"
+                ? allItems.length
+                : (filteredCollections[tab.id]?.length || 0);
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                className={`tab-chip${activeSource === tab.id ? " tab-chip-active" : ""}`}
+                onClick={() => setActiveSource(tab.id)}
+              >
+                {tab.label}
+                <span className="tab-chip-count">{count}</span>
+              </button>
+            );
+          })}
         </div>
 
         {error ? <p className="error-text">{error}</p> : null}
@@ -206,7 +213,7 @@ export default function ExplorerPage() {
                   </div>
                   <h4>{item.title}</h4>
                   <p className="timeline-meta">{item.meta}</p>
-                  <p className="explorer-record-snippet">{item.snippet}</p>
+                  <p className="explorer-record-snippet">{shortenLabel(item.snippet, 140)}</p>
                 </button>
               ))}
             </div>
@@ -256,15 +263,14 @@ export default function ExplorerPage() {
               <>
                 <div className="explorer-detail-meta">
                   <span className="explorer-detail-pill">
-                    {sourceTabs.find((tab) => tab.id === activeSource)?.label}
+                    {selectedRecord?.badges?.[0] || sourceTabs.find((tab) => tab.id === activeSource)?.label}
                   </span>
-                  <span className="explorer-detail-pill">{selectedRecord.meta}</span>
+                  <span className="explorer-detail-pill">
+                    {shortenLabel(selectedRecord.meta, 80)}
+                  </span>
                 </div>
-                <p className="panel-copy">
-                  Use this pane to read the full artifact without losing your place in the result list.
-                </p>
                 <pre className="trace-block trace-block-text explorer-reader">
-                  {showFullText ? selectedRecord.content : selectedRecord.snippet}
+                  {selectedRecord.content}
                 </pre>
               </>
             ) : (

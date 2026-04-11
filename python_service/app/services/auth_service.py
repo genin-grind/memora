@@ -94,24 +94,26 @@ def validate_org_user(email: str, access_key: str):
     if not clean_email or "@" not in clean_email:
         return False, "Enter a valid organization email.", None
 
-    if not str(access_key or "").strip():
-        return False, "Enter your Memora access key.", None
-
-    if str(access_key).strip() != MEMORA_ACCESS_KEY:
-        return False, "Invalid Memora access key.", None
-
+    # Check email organization membership FIRST (before access key)
     domain = clean_email.split("@")[-1].lower()
     allowed_domains = [item.lower() for item in org_config.get("allowed_domains", [])]
     allowed_emails = [item.lower() for item in org_config.get("allowed_emails", [])]
 
     if allowed_domains and domain not in allowed_domains:
-        return False, "Your email domain is not allowed for this organization.", None
+        return False, "Email domain not in organization.", None
 
     if allowed_emails and clean_email not in allowed_emails:
-        return False, "This email is not registered for organization access.", None
+        return False, "Email not registered in organization.", None
 
     if known_org_emails and clean_email not in known_org_emails and clean_email not in allowed_emails:
-        return False, "This email was not found in the organization memory sources.", None
+        return False, "Email not found in organization memory sources.", None
+
+    # NOW check access key
+    if not str(access_key or "").strip():
+        return False, "Enter your Memora access key.", None
+
+    if str(access_key).strip() != MEMORA_ACCESS_KEY:
+        return False, "Invalid Memora access key.", None
 
     display_name = known_people.get(
         clean_email,
